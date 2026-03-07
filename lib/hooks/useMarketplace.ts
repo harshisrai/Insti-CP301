@@ -21,16 +21,12 @@ export function useMarketplace(initialFilters?: GetMarketplaceFilters) {
   const fetchingRef = useRef(false);
   const [filters, setFilters] = useState<GetMarketplaceFilters>(initialFilters || { limit: 12 });
 
-  console.log(`[${new Date().toISOString()}] [useMarketplace] Hook Rendered - Items: ${items.length}, Loading: ${loading}, Filters: ${JSON.stringify(filters)}`);
 
   const fetchItems = useCallback(async (isLoadMore = false, currentFilters?: GetMarketplaceFilters) => {
     if (fetchingRef.current) {
-      console.log(`[${new Date().toISOString()}] [useMarketplace] Fetch already in progress, skipping`);
       return;
     }
     fetchingRef.current = true;
-    const startTime = Date.now();
-    console.log(`[${new Date().toISOString()}] [useMarketplace] fetchItems triggered - isLoadMore: ${isLoadMore}, filters: ${JSON.stringify(currentFilters || filters)}`);
     try {
       setLoading(true);
       setError(null);
@@ -42,9 +38,7 @@ export function useMarketplace(initialFilters?: GetMarketplaceFilters) {
       setItems(prev => isLoadMore ? [...prev, ...response.data] : response.data);
       setHasMore(response.hasMore);
       pageRef.current = currentPage;
-      console.log(`[${new Date().toISOString()}] [useMarketplace] fetchItems SUCCESS - Items: ${response.data.length}, Duration: ${Date.now() - startTime}ms`);
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] [useMarketplace] fetchItems ERROR:`, err);
       setError(err.message || 'Failed to load marketplace items');
     } finally {
       setLoading(false);
@@ -53,7 +47,6 @@ export function useMarketplace(initialFilters?: GetMarketplaceFilters) {
   }, [filters]);
 
   useEffect(() => {
-    console.log(`[${new Date().toISOString()}] [useMarketplace] useEffect (filters) - Triggering fetch. Filters: ${JSON.stringify(filters)}`);
     fetchItems(false, filters);
   }, [filters, fetchItems]);
 

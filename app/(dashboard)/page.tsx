@@ -7,7 +7,6 @@ import { RecentNoticesWidget } from '@/components/features/dashboard/RecentNotic
 import { FeaturedBlogsWidget } from '@/components/features/dashboard/FeaturedBlogsWidget';
 
 export default function DashboardPage() {
-  console.log('[DashboardPage] Rendered');
   const { events, notices, blogs, loading } = useDashboardWidgets();
 
   return (

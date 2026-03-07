@@ -10,6 +10,13 @@ import { db } from '@/lib/db';
 import type { User, SignInRequest, SignUpRequest } from '@/lib/types';
 import { getUserById } from '@/lib/db/users';
 
+// Routes that don't require authentication
+const PUBLIC_PATHS = ['/login', '/signup', '/forgot-password'];
+
+function isPublicPath(pathname: string): boolean {
+  return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));
+}
+
 interface AuthContextType {
   user: User | null;
   loading: boolean;
@@ -27,76 +34,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const isInitialized = React.useRef(false);
+
+  // Concurrency lock for syncCookie — prevents overlapping requests
+  const syncingRef = React.useRef(false);
   const lastTokenRef = React.useRef<string | null>(undefined);
 
-  console.log(`[${new Date().toISOString()}] [AuthContext] Hook Rendered - User: ${user?.id || 'null'}, Loading: ${loading}`);
-
-  // Check auth state on mount
-  useEffect(() => {
-    if (isInitialized.current) {
-      console.log(`[${new Date().toISOString()}] [AuthContext] Skip redundant initialization`);
-      return;
-    }
-    isInitialized.current = true;
-
-    async function checkAuth() {
-      console.log(`[AuthContext] checkAuth started`);
-      try {
-        const {
-          data: { session },
-        } = await db.auth.getSession();
-        console.log(`[AuthContext] getSession returned - session exists: ${!!session}`);
-
-        if (session?.user) {
-          const userData = await getUserById(session.user.id);
-          if (userData) {
-            setUser(userData);
-            console.log(`[AuthContext] Syncing cookie on checkAuth`);
-            await syncCookie(session.access_token);
-          }
-        }
-      } catch (err) {
-        console.error('[AuthContext] Error checking auth:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    checkAuth();
-
-    // Subscribe to auth state changes
-    const {
-      data: { subscription },
-    } = db.auth.onAuthStateChange(async (event, session) => {
-      console.log(`[AuthContext] onAuthStateChange - Event: ${event}, Session exists: ${!!session}`);
-      if (session) {
-        try {
-          const userData = await getUserById(session.user.id);
-          if (userData) {
-            setUser(userData);
-            console.log(`[AuthContext] Syncing cookie on onAuthStateChange (${event})`);
-            await syncCookie(session.access_token);
-          }
-        } catch (err) {
-          console.error('[AuthContext] Error loading user:', err);
-        }
-      } else {
-        setUser(null);
-      }
-    });
-
-    return () => subscription?.unsubscribe();
-  }, []);
-
-  // Helper to sync cookie with server
+  // ── Cookie sync (concurrency-safe) ──────────────────────────
   const syncCookie = async (accessToken: string | null) => {
-    const startTime = Date.now();
-    if (lastTokenRef.current === accessToken) {
-      console.log(`[${new Date().toISOString()}] [AuthContext] syncCookie - Token unchanged, skipping`);
-      return;
-    }
+    // Skip if same token
+    if (lastTokenRef.current === accessToken) return;
+    // Skip if already syncing
+    if (syncingRef.current) return;
+    syncingRef.current = true;
     lastTokenRef.current = accessToken;
-    console.log(`[${new Date().toISOString()}] [AuthContext] syncCookie started - token exists: ${!!accessToken}`);
+
     try {
       if (accessToken) {
         await fetch('/api/auth/set-cookie', {
@@ -107,18 +58,72 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         await fetch('/api/auth/clear-cookie', { method: 'POST' });
       }
-      console.log(`[${new Date().toISOString()}] [AuthContext] syncCookie SUCCESS - Duration: ${Date.now() - startTime}ms`);
     } catch (err) {
-      console.error(`[${new Date().toISOString()}] [AuthContext] syncCookie FATAL ERROR:`, err);
+      console.error('[AuthContext] syncCookie error:', err);
+    } finally {
+      syncingRef.current = false;
     }
   };
 
+  // ── Initialize: getSession + listen for changes ─────────────
+  useEffect(() => {
+    if (isInitialized.current) return;
+    isInitialized.current = true;
+
+    // Step 1: Get session on mount (no refreshSession — Supabase handles refresh automatically)
+    async function checkAuth() {
+      try {
+        const {
+          data: { session },
+        } = await db.auth.getSession();
+
+        if (session) {
+          const userData = await getUserById(session.user.id);
+          if (userData) {
+            setUser(userData);
+          }
+        }
+      } catch (err) {
+        console.error('[AuthContext] checkAuth error:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    checkAuth();
+
+    // Step 2: Listen for auth changes — THIS is the single source of truth for cookie sync
+    const {
+      data: { subscription },
+    } = db.auth.onAuthStateChange(async (event, session) => {
+      // Only act on meaningful events
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (session) {
+          const userData = await getUserById(session.user.id);
+          if (userData) setUser(userData);
+          // Sync cookie — the ONLY place this happens for active sessions
+          syncCookie(session.access_token);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        syncCookie(null);
+        // Redirect to login if on a protected route
+        if (typeof window !== 'undefined' && !isPublicPath(window.location.pathname)) {
+          window.location.href = '/login';
+        }
+      }
+      // INITIAL_SESSION is handled by checkAuth above — no action needed here
+    });
+
+    return () => subscription?.unsubscribe();
+  }, []);
+
+  // ── Sign Up ─────────────────────────────────────────────────
   const signUp = async (data: SignUpRequest) => {
     try {
       setError(null);
       setLoading(true);
 
-      // Sign up with Supabase Auth
       const { data: authData, error: signUpError } = await db.auth.signUp({
         email: data.email,
         password: data.password,
@@ -139,19 +144,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (profileError) {
-        // Clean up auth user if profile creation fails
         await db.auth.admin.deleteUser(authData.user.id);
         throw profileError;
       }
 
       // Load the created user
       const userData = await getUserById(authData.user.id);
-      if (userData) {
-        setUser(userData);
-      }
+      if (userData) setUser(userData);
 
-      // Sync cookie server-side BEFORE redirecting
-      await syncCookie(authData.session?.access_token || null);
+      // Cookie sync is handled by onAuthStateChange(SIGNED_IN) — not here
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Sign up failed';
       setError(message);
@@ -161,6 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // ── Sign In ─────────────────────────────────────────────────
   const signIn = async (data: SignInRequest) => {
     try {
       setError(null);
@@ -176,12 +178,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Load user profile
       const userData = await getUserById(authData.user.id);
-      if (userData) {
-        setUser(userData);
-      }
+      if (userData) setUser(userData);
 
-      // Sync cookie server-side BEFORE redirecting
-      await syncCookie(authData.session?.access_token || null);
+      // Cookie sync is handled by onAuthStateChange(SIGNED_IN) — not here
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Sign in failed';
       setError(message);
@@ -191,13 +190,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // ── Sign Out ────────────────────────────────────────────────
   const signOut = async () => {
     try {
       setError(null);
-      await syncCookie(null); // Clear server cookie first
       const { error } = await db.auth.signOut();
       if (error) throw error;
-      setUser(null);
+      // Cookie clear + user null handled by onAuthStateChange(SIGNED_OUT)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Sign out failed';
       setError(message);
@@ -205,6 +204,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // ── Update Profile ──────────────────────────────────────────
   const updateProfile = async (updates: Partial<User>) => {
     try {
       if (!user) throw new Error('No user logged in');
@@ -217,11 +217,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) throw error;
 
-      // Reload user data
       const userData = await getUserById(user.id);
-      if (userData) {
-        setUser(userData);
-      }
+      if (userData) setUser(userData);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Profile update failed';
       setError(message);

@@ -21,16 +21,12 @@ export function useLostFound(initialFilters?: GetLFFilters) {
     const fetchingRef = useRef(false);
     const [filters, setFilters] = useState<GetLFFilters>(initialFilters || { limit: 15 });
 
-    console.log(`[${new Date().toISOString()}] [useLostFound] Hook Rendered - Items: ${items.length}, Loading: ${loading}, Filters: ${JSON.stringify(filters)}`);
 
     const fetchItems = useCallback(async (isLoadMore = false, currentFilters?: GetLFFilters) => {
         if (fetchingRef.current) {
-            console.log(`[${new Date().toISOString()}] [useLostFound] Fetch already in progress, skipping`);
             return;
         }
         fetchingRef.current = true;
-        const startTime = Date.now();
-        console.log(`[${new Date().toISOString()}] [useLostFound] fetchItems triggered - isLoadMore: ${isLoadMore}, filters: ${JSON.stringify(currentFilters || filters)}`);
         try {
             setLoading(true);
             setError(null);
@@ -42,9 +38,7 @@ export function useLostFound(initialFilters?: GetLFFilters) {
             setItems(prev => isLoadMore ? [...prev, ...response.data] : response.data);
             setHasMore(response.hasMore);
             pageRef.current = currentPage;
-            console.log(`[${new Date().toISOString()}] [useLostFound] fetchItems SUCCESS - Items: ${response.data.length}, Duration: ${Date.now() - startTime}ms`);
         } catch (err: any) {
-            console.error(`[${new Date().toISOString()}] [useLostFound] fetchItems ERROR:`, err);
             setError(err.message || 'Failed to load lost & found items');
         } finally {
             setLoading(false);
@@ -53,7 +47,6 @@ export function useLostFound(initialFilters?: GetLFFilters) {
     }, [filters]);
 
     useEffect(() => {
-        console.log(`[${new Date().toISOString()}] [useLostFound] useEffect (filters) - Triggering fetch. Filters: ${JSON.stringify(filters)}`);
         fetchItems(false, filters);
     }, [filters, fetchItems]);
 

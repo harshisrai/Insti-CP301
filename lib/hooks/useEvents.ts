@@ -21,16 +21,12 @@ export function useEvents(initialFilters?: GetEventsFilters) {
   const fetchingRef = useRef(false);
   const [filters, setFilters] = useState<GetEventsFilters>(initialFilters || { limit: 15 });
 
-  console.log(`[${new Date().toISOString()}] [useEvents] Hook Rendered - Events: ${events.length}, Loading: ${loading}, Filters: ${JSON.stringify(filters)}`);
 
   const fetchEvents = useCallback(async (isLoadMore = false, currentFilters?: GetEventsFilters) => {
     if (fetchingRef.current) {
-      console.log(`[${new Date().toISOString()}] [useEvents] Fetch already in progress, skipping`);
       return;
     }
     fetchingRef.current = true;
-    const startTime = Date.now();
-    console.log(`[${new Date().toISOString()}] [useEvents] fetchEvents triggered - isLoadMore: ${isLoadMore}, filters: ${JSON.stringify(currentFilters || filters)}`);
     try {
       setLoading(true);
       setError(null);
@@ -42,9 +38,7 @@ export function useEvents(initialFilters?: GetEventsFilters) {
       setEvents(prev => isLoadMore ? [...prev, ...response.data] : response.data);
       setHasMore(response.hasMore);
       pageRef.current = currentPage;
-      console.log(`[${new Date().toISOString()}] [useEvents] fetchEvents SUCCESS - Events: ${response.data.length}, Duration: ${Date.now() - startTime}ms`);
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] [useEvents] fetchEvents ERROR:`, err);
       setError(err.message || 'Failed to load events');
     } finally {
       setLoading(false);
@@ -53,7 +47,6 @@ export function useEvents(initialFilters?: GetEventsFilters) {
   }, []);
 
   useEffect(() => {
-    console.log(`[${new Date().toISOString()}] [useEvents] useEffect (filters) - Triggering fetch. Filters: ${JSON.stringify(filters)}`);
     fetchEvents(false, filters);
   }, [filters, fetchEvents]);
 

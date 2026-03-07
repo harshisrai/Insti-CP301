@@ -23,12 +23,9 @@ export function useNotices(initialFilters?: GetNoticesFilters) {
 
     const fetchNotices = useCallback(async (isLoadMore = false, currentFilters?: GetNoticesFilters) => {
         if (fetchingRef.current) {
-            console.log(`[${new Date().toISOString()}] [useNotices] Fetch already in progress, skipping`);
             return;
         }
         fetchingRef.current = true;
-        const startTime = Date.now();
-        console.log(`[${new Date().toISOString()}] [useNotices] fetchNotices triggered - isLoadMore: ${isLoadMore}, filters: ${JSON.stringify(currentFilters || filters)}`);
         try {
             setLoading(true);
             setError(null);
@@ -40,9 +37,7 @@ export function useNotices(initialFilters?: GetNoticesFilters) {
             setNotices(prev => isLoadMore ? [...prev, ...response.data] : response.data);
             setHasMore(response.hasMore);
             pageRef.current = currentPage;
-            console.log(`[${new Date().toISOString()}] [useNotices] fetchNotices SUCCESS - Notices: ${response.data.length}, Duration: ${Date.now() - startTime}ms`);
         } catch (err: any) {
-            console.error(`[${new Date().toISOString()}] [useNotices] fetchNotices ERROR:`, err);
             setError(err.message || 'Failed to load notices');
         } finally {
             setLoading(false);
@@ -51,7 +46,6 @@ export function useNotices(initialFilters?: GetNoticesFilters) {
     }, [filters]);
 
     useEffect(() => {
-        console.log(`[${new Date().toISOString()}] [useNotices] useEffect (filters) - Triggering fetch. Filters: ${JSON.stringify(filters)}`);
         fetchNotices(false, filters);
     }, [filters, fetchNotices]);
 

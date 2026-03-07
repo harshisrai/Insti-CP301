@@ -12,16 +12,12 @@ export function useBlogs(initialCategory?: BlogCategory) {
   const fetchingRef = useRef(false);
   const limit = 20;
 
-  console.log(`[${new Date().toISOString()}] [useBlogs] Hook Rendered - Category: ${category}, Loading: ${loading}, Blogs: ${blogs.length}`);
 
   const fetchBlogs = useCallback(async (isLoadMore = false, cat?: BlogCategory) => {
     if (fetchingRef.current) {
-      console.log(`[${new Date().toISOString()}] [useBlogs] Fetch already in progress, skipping`);
       return;
     }
     fetchingRef.current = true;
-    const startTime = Date.now();
-    console.log(`[${new Date().toISOString()}] [useBlogs] fetchBlogs triggered - isLoadMore: ${isLoadMore}, cat: ${cat}`);
     try {
       setLoading(true);
       setError(null);
@@ -32,9 +28,7 @@ export function useBlogs(initialCategory?: BlogCategory) {
       setHasMore(data.length === limit);
       if (isLoadMore) pageRef.current += 1;
       else pageRef.current = 0;
-      console.log(`[${new Date().toISOString()}] [useBlogs] fetchBlogs SUCCESS - Blogs: ${data.length}, Duration: ${Date.now() - startTime}ms`);
     } catch (err) {
-      console.error(`[${new Date().toISOString()}] [useBlogs] fetchBlogs ERROR:`, err);
       setError(err instanceof Error ? err.message : 'Failed to fetch blogs');
     } finally {
       setLoading(false);
@@ -43,7 +37,6 @@ export function useBlogs(initialCategory?: BlogCategory) {
   }, []);
 
   useEffect(() => {
-    console.log(`[${new Date().toISOString()}] [useBlogs] useEffect (category) - Triggering fetch. Category: ${category}`);
     fetchBlogs(false, category);
   }, [category]); // Re-fetch when category changes
 
