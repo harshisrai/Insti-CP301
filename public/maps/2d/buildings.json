@@ -1,0 +1,210 @@
+[
+    {
+        "name": "Student Activity Building",
+        "shortCode": "SAB",
+        "category": "Student Life",
+        "description": "Hub for club activities, societies, student governance, and recreational spaces.",
+        "departments": [],
+        "polygon": [
+            [
+                30.9661204,
+                76.47698311
+            ],
+            [
+                30.9661204,
+                76.47799258
+            ],
+            [
+                30.96539881,
+                76.47799258
+            ],
+            [
+                30.96539881,
+                76.47698311
+            ]
+        ]
+    },
+    {
+        "name": "Lecture Hall Complex",
+        "shortCode": "LHC",
+        "category": "Academic",
+        "description": "Main lecture halls for undergraduate and postgraduate courses.",
+        "departments": [
+            "All Departments"
+        ],
+        "polygon": [
+            [
+                30.96698631,
+                76.47496416
+            ],
+            [
+                30.96698631,
+                76.47614188
+            ],
+            [
+                30.96626472,
+                76.47614188
+            ],
+            [
+                30.96626472,
+                76.47496416
+            ]
+        ]
+    },
+    {
+        "name": "Central Library",
+        "shortCode": "LIB",
+        "category": "Academic",
+        "description": "Central library with reading halls, digital resources, journals, and group study rooms.",
+        "departments": [
+            "All Departments"
+        ],
+        "polygon": [
+            [
+                30.96727495,
+                76.47328171
+            ],
+            [
+                30.96727495,
+                76.47429118
+            ],
+            [
+                30.96655336,
+                76.47429118
+            ],
+            [
+                30.96655336,
+                76.47328171
+            ]
+        ]
+    },
+    {
+        "name": "Administrative Block",
+        "shortCode": "ADMIN",
+        "category": "Administrative",
+        "description": "Houses the Dean's offices, registrar, finance, and administrative departments.",
+        "departments": [
+            "Administration"
+        ],
+        "polygon": [
+            [
+                30.96785223,
+                76.47227223
+            ],
+            [
+                30.96785223,
+                76.47311346
+            ],
+            [
+                30.96727495,
+                76.47311346
+            ],
+            [
+                30.96727495,
+                76.47227223
+            ]
+        ]
+    },
+    {
+        "name": "Hostel - Kameng",
+        "shortCode": "KAMENG",
+        "category": "Hostel",
+        "description": "Boys hostel with single and shared rooms, common areas, and mess facility.",
+        "departments": [],
+        "polygon": [
+            [
+                30.96467722,
+                76.48034801
+            ],
+            [
+                30.96467722,
+                76.48135749
+            ],
+            [
+                30.9638113,
+                76.48135749
+            ],
+            [
+                30.9638113,
+                76.48034801
+            ]
+        ]
+    },
+    {
+        "name": "Sports Complex",
+        "shortCode": "SPORTS",
+        "category": "Sports",
+        "description": "Indoor and outdoor sports facilities including basketball, badminton, and gymnasium.",
+        "departments": [],
+        "polygon": [
+            [
+                30.96698631,
+                76.48236696
+            ],
+            [
+                30.96698631,
+                76.48371292
+            ],
+            [
+                30.9661204,
+                76.48371292
+            ],
+            [
+                30.9661204,
+                76.48236696
+            ]
+        ]
+    },
+    {
+        "name": "Dining Hall",
+        "shortCode": "MESS",
+        "category": "Dining",
+        "description": "Central dining hall serving breakfast, lunch, dinner, and snacks for hostellers.",
+        "departments": [],
+        "polygon": [
+            [
+                30.96525449,
+                76.47900205
+            ],
+            [
+                30.96525449,
+                76.48001152
+            ],
+            [
+                30.96467722,
+                76.48001152
+            ],
+            [
+                30.96467722,
+                76.47900205
+            ]
+        ]
+    },
+    {
+        "name": "Computer Science Building",
+        "shortCode": "CSE",
+        "category": "Academic",
+        "description": "Department of Computer Science and Engineering \u00e2\u20ac\u201d labs, faculty offices, and research spaces.",
+        "departments": [
+            "CSE"
+        ],
+        "polygon": [
+            [
+                30.9661204,
+                76.47395469
+            ],
+            [
+                30.9661204,
+                76.47479591
+            ],
+            [
+                30.96554313,
+                76.47479591
+            ],
+            [
+                30.96554313,
+                76.47395469
+            ]
+        ]
+    }
+]
