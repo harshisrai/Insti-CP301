@@ -11,7 +11,6 @@ import {
   Bell,
   MessageCircle,
   Search,
-  User,
   ExternalLink,
   X,
   Activity,
@@ -38,7 +37,6 @@ const MAIN_LINKS = [
   { href: '/map', icon: Search, label: 'Campus Map' },
   { href: '/lost-found', icon: FileText, label: 'Lost & Found' },
   { href: '/messages', icon: MessageCircle, label: 'Messages' },
-  { href: '/profile', icon: User, label: 'Profile' },
   { href: '/quick-links', icon: ExternalLink, label: 'Quick Links' },
 ];
 

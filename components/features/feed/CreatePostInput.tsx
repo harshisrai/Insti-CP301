@@ -24,11 +24,15 @@ export function CreatePostInput({ onPostCreated }: CreatePostInputProps) {
         if (!content.trim() || !user) return;
 
         setIsSubmitting(true);
-        const success = await onPostCreated(content);
-        setIsSubmitting(false);
-
-        if (success) {
-            setContent('');
+        try {
+            const success = await onPostCreated(content);
+            if (success) {
+                setContent('');
+            }
+        } catch {
+            // Error handled by parent
+        } finally {
+            setIsSubmitting(false);
         }
     };
 

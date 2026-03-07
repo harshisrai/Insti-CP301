@@ -41,21 +41,25 @@ export function CreateNoticeForm() {
 
         const tags = tagsStr.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
 
-        const success = await addNotice({
-            title,
-            content,
-            category,
-            priority,
-            tags,
-            postingIdentityId: selectedIdentityId || undefined, // from the dropdown selector
-        });
+        try {
+            const success = await addNotice({
+                title,
+                content,
+                category,
+                priority,
+                tags,
+                postingIdentityId: selectedIdentityId || undefined,
+            });
 
-        setIsSubmitting(false);
-
-        if (success) {
-            router.push('/notices');
-        } else {
-            setError('Failed to publish. Check if you have permissions to post officially.');
+            if (success) {
+                router.push('/notices');
+            } else {
+                setError('Failed to publish. Check if you have permissions to post officially.');
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to publish. Please try again.');
+        } finally {
+            setIsSubmitting(false);
         }
     };
 

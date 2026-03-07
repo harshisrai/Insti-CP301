@@ -47,26 +47,30 @@ export function CreateListingForm() {
         setIsSubmitting(true);
         setError('');
 
-        const images = imagesStr.split(',').map(u => u.trim()).filter(Boolean);
+        try {
+            const images = imagesStr.split(',').map(u => u.trim()).filter(Boolean);
 
-        const success = await createListing({
-            title,
-            description,
-            category,
-            price: parsedPrice,
-            isNegotiable,
-            condition,
-            images,
-            pickupLocation,
-            deliveryAvailable,
-        });
+            const success = await createListing({
+                title,
+                description,
+                category,
+                price: parsedPrice,
+                isNegotiable,
+                condition,
+                images,
+                pickupLocation,
+                deliveryAvailable,
+            });
 
-        setIsSubmitting(false);
-
-        if (success) {
-            router.push('/marketplace');
-        } else {
-            setError('Failed to create listing. Please try again.');
+            if (success) {
+                router.push('/marketplace');
+            } else {
+                setError('Failed to create listing. Please try again.');
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to create listing. Please try again.');
+        } finally {
+            setIsSubmitting(false);
         }
     };
 

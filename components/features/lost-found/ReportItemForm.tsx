@@ -48,23 +48,27 @@ export function ReportItemForm() {
             parsedDate = new Date(dateLostFound).toISOString();
         }
 
-        const success = await reportItem({
-            itemName,
-            category,
-            status,
-            description,
-            locationLostFound,
-            dateLostFound: parsedDate,
-            contactInfo,
-            images,
-        });
+        try {
+            const success = await reportItem({
+                itemName,
+                category,
+                status,
+                description,
+                locationLostFound,
+                dateLostFound: parsedDate,
+                contactInfo,
+                images,
+            });
 
-        setIsSubmitting(false);
-
-        if (success) {
-            router.push('/lost-found');
-        } else {
-            setError('Failed to submit report. Please try again.');
+            if (success) {
+                router.push('/lost-found');
+            } else {
+                setError('Failed to submit report. Please try again.');
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to submit report. Please try again.');
+        } finally {
+            setIsSubmitting(false);
         }
     };
 

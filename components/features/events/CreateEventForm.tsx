@@ -58,23 +58,27 @@ export function CreateEventForm() {
         // If a POR is selected, use that org ID as the organizer
         const organizerId = selectedIdentity?.orgId;
 
-        const success = await addEvent({
-            title,
-            description,
-            type,
-            startTime,
-            venueName,
-            registrationUrl: registrationUrl || undefined,
-            tags,
-            organizerId, // Will be null if posting as personal
-        });
+        try {
+            const success = await addEvent({
+                title,
+                description,
+                type,
+                startTime,
+                venueName,
+                registrationUrl: registrationUrl || undefined,
+                tags,
+                organizerId, // Will be null if posting as personal
+            });
 
-        setIsSubmitting(false);
-
-        if (success) {
-            router.push('/events');
-        } else {
-            setError('Failed to publish event. Please try again.');
+            if (success) {
+                router.push('/events');
+            } else {
+                setError('Failed to publish event. Please try again.');
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to publish event. Please try again.');
+        } finally {
+            setIsSubmitting(false);
         }
     };
 

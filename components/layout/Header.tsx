@@ -1,10 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { Bell, MessageCircle, Search, Menu } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Bell, MessageCircle, Search, Menu, User, LogOut } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { PostingIdentitySelector } from '@/components/features/profile/PostingIdentitySelector';
 import { useAuth } from '@/contexts/AuthContext';
 import { getInitials } from '@/lib/utils';
@@ -14,7 +22,16 @@ interface HeaderProps {
 }
 
 export function Header({ onMenuClick }: HeaderProps) {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const router = useRouter();
+
+  const handleSignOut = () => {
+    // Redirect immediately — no visible transition
+    window.location.href = '/login';
+    // Cleanup runs in background while navigating
+    fetch('/api/auth/clear-cookie', { method: 'POST' }).catch(() => { });
+    signOut().catch(() => { });
+  };
 
   return (
     <header className="sticky top-0 z-50 backdrop-blur-md bg-background/80 border-b border-border">
@@ -72,14 +89,40 @@ export function Header({ onMenuClick }: HeaderProps) {
             <>
               <div className="hidden sm:block border-r border-border h-6 mx-2" />
               <PostingIdentitySelector />
-              <Link href="/profile" className="ml-1 shrink-0">
-                <Avatar className="w-8 h-8 border-2 border-amber-400">
-                  <AvatarImage src={user.profilePictureUrl} alt={user.fullName} />
-                  <AvatarFallback className="bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 text-sm font-medium">
-                    {getInitials(user.fullName)}
-                  </AvatarFallback>
-                </Avatar>
-              </Link>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="ml-1 shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-background">
+                    <Avatar className="w-8 h-8 border-2 border-amber-400 cursor-pointer">
+                      <AvatarImage src={user.profilePictureUrl} alt={user.fullName} />
+                      <AvatarFallback className="bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 text-sm font-medium">
+                        {getInitials(user.fullName)}
+                      </AvatarFallback>
+                    </Avatar>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <div className="px-3 py-2">
+                    <p className="text-sm font-medium text-foreground truncate">{user.fullName}</p>
+                    <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link href="/profile" className="cursor-pointer">
+                      <User size={16} className="mr-2" />
+                      Profile
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={handleSignOut}
+                    className="text-red-600 dark:text-red-400 cursor-pointer focus:text-red-600 dark:focus:text-red-400"
+                  >
+                    <LogOut size={16} className="mr-2" />
+                    Sign Out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </>
           )}
         </div>
@@ -87,3 +130,4 @@ export function Header({ onMenuClick }: HeaderProps) {
     </header>
   );
 }
+
