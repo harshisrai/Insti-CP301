@@ -48,7 +48,7 @@ export function useEvents(initialFilters?: GetEventsFilters) {
 
   useEffect(() => {
     fetchEvents(false, filters);
-  }, [filters, fetchEvents]);
+  }, [filters]);
 
   const loadMore = useCallback(() => {
     if (!loading && hasMore) {

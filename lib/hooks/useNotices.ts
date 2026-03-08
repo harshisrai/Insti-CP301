@@ -43,11 +43,11 @@ export function useNotices(initialFilters?: GetNoticesFilters) {
             setLoading(false);
             fetchingRef.current = false;
         }
-    }, [filters]);
+    }, []);
 
     useEffect(() => {
         fetchNotices(false, filters);
-    }, [filters, fetchNotices]);
+    }, [filters]);
 
     const loadMore = useCallback(() => {
         if (!loading && hasMore) {

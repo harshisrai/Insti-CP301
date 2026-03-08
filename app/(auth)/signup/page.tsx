@@ -63,7 +63,7 @@ export default function SignupPage() {
         return
       }
 
-      router.push('/')
+      window.location.href = '/';
     } catch (err) {
       setError('An error occurred. Please try again.')
       console.error(err)

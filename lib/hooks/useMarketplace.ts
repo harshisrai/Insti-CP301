@@ -44,11 +44,11 @@ export function useMarketplace(initialFilters?: GetMarketplaceFilters) {
       setLoading(false);
       fetchingRef.current = false;
     }
-  }, [filters]);
+  }, []);
 
   useEffect(() => {
     fetchItems(false, filters);
-  }, [filters, fetchItems]);
+  }, [filters]);
 
   const loadMore = useCallback(() => {
     if (!loading && hasMore) {

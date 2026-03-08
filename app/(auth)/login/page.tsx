@@ -37,7 +37,11 @@ export default function LoginPage() {
         email: formData.email,
         password: formData.password,
       });
-      router.push('/');
+      // Auth transitions must be full page loads — the cookie needs to
+      // be picked up by proxy.ts on the next server request.
+      const params = new URLSearchParams(window.location.search);
+      const redirect = params.get('redirect') || '/';
+      window.location.href = redirect;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {

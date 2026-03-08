@@ -49,17 +49,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     lastTokenRef.current = accessToken;
 
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+
       if (accessToken) {
         await fetch('/api/auth/set-cookie', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ access_token: accessToken }),
+          signal: controller.signal,
         });
       } else {
-        await fetch('/api/auth/clear-cookie', { method: 'POST' });
+        await fetch('/api/auth/clear-cookie', {
+          method: 'POST',
+          signal: controller.signal,
+        });
       }
+
+      clearTimeout(timeout);
     } catch (err) {
-      console.error('[AuthContext] syncCookie error:', err);
+      // Silently handle aborts and network errors — cookie sync is best-effort
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        console.warn('[AuthContext] syncCookie timed out after 5s');
+      } else {
+        console.error('[AuthContext] syncCookie error:', err);
+      }
     } finally {
       syncingRef.current = false;
     }
@@ -81,6 +95,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const userData = await getUserById(session.user.id);
           if (userData) {
             setUser(userData);
+          } else {
+            // They have a Supabase session but no profile in the DB.
+            // This is a broken user state — force sign out.
+            document.cookie = 'sb-auth-token=; path=/; max-age=0';
+            await db.auth.signOut().catch(() => { });
+            if (typeof window !== 'undefined') window.location.replace('/login');
+          }
+        } else {
+          // DESYNC DETECTION: Supabase client has no session (localStorage empty),
+          // BUT we are on a protected route like the dashboard.
+          // This means the proxy let us in because of a stale server cookie.
+          // We must destroy the stale cookie and redirect to login.
+          if (typeof window !== 'undefined' && !isPublicPath(window.location.pathname)) {
+            document.cookie = 'sb-auth-token=; path=/; max-age=0';
+            window.location.replace('/login');
           }
         }
       } catch (err) {
@@ -96,21 +125,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = db.auth.onAuthStateChange(async (event, session) => {
-      // Only act on meaningful events
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+      if (event === 'SIGNED_IN') {
+        // Full user load only on actual sign-in (not token refresh)
         if (session) {
           const userData = await getUserById(session.user.id);
           if (userData) setUser(userData);
-          // Sync cookie — the ONLY place this happens for active sessions
+          syncCookie(session.access_token);
+        }
+      } else if (event === 'TOKEN_REFRESHED') {
+        // Token rotated (e.g. tab regained focus) — only sync the cookie.
+        // Do NOT re-fetch user from DB; user data hasn't changed,
+        // and the DB call can hang and block subsequent navigation.
+        if (session) {
           syncCookie(session.access_token);
         }
       } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        syncCookie(null);
-        // Redirect to login if on a protected route
-        if (typeof window !== 'undefined' && !isPublicPath(window.location.pathname)) {
-          window.location.href = '/login';
-        }
+        // Clear cookie client-side (instant, no network).
+        // Do NOT redirect here — this event fires in hidden tabs where
+        // navigation is deferred and unreliable. MainLayout's visibility
+        // handler detects the missing cookie and forces a hard reload
+        // when the tab becomes visible.
+        document.cookie = 'sb-auth-token=; path=/; max-age=0';
       }
       // INITIAL_SESSION is handled by checkAuth above — no action needed here
     });
@@ -152,7 +187,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userData = await getUserById(authData.user.id);
       if (userData) setUser(userData);
 
-      // Cookie sync is handled by onAuthStateChange(SIGNED_IN) — not here
+      // We MUST sync the cookie here and wait for it to finish, otherwise
+      // the redirect on the signup page will happen before the cookie is set.
+      await syncCookie(authData.session?.access_token || null);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Sign up failed';
       setError(message);
@@ -180,7 +217,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userData = await getUserById(authData.user.id);
       if (userData) setUser(userData);
 
-      // Cookie sync is handled by onAuthStateChange(SIGNED_IN) — not here
+      // We MUST sync the cookie here and wait for it to finish, otherwise
+      // the redirect on the login page will happen before the cookie is set.
+      await syncCookie(authData.session?.access_token || null);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Sign in failed';
       setError(message);

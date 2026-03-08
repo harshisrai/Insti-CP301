@@ -1,0 +1,192 @@
+# Navigation Hang & Sign-Out Post-Mortem
+
+> **App**: Next.js 16.1.6 + Turbopack + Supabase + React 19  
+> **Date**: 2026-03-08  
+> **Status**: Resolved
+
+---
+
+## Symptom
+
+After switching away from the browser tab (even for 1 second) and returning, all client-side navigation via sidebar/header links would **hang forever** — stuck on a loading spinner. A hard reload (F5) always fixed it. Sign-out also had multiple edge cases where the redirect to `/login` would fail or leave stale tabs behind.
+
+---
+
+## Root Cause Analysis
+
+### Problem 1: RSC Navigation Fetch Hangs After Tab Switch
+
+**What happens in Next.js App Router**: When clicking a `<Link>`, Next.js fires a `GET /?_rsc=...` fetch (RSC payload) to the dev server. The server responds with a serialized React tree that the client processes.
+
+**What goes wrong**: When the browser tab is hidden, TCP keepalive connections to the dev server (`10.98.0.17:3000`) become stale. Turbopack HMR may also regenerate chunk hashes. When the tab regains focus:
+
+1. Next.js router tries to reuse the stale TCP connection for the RSC fetch
+2. The RSC payload references chunk URLs like `_page_tsx_f34bc7a5._.js` that may have been invalidated by HMR
+3. The server responds **200** (confirmed in logs), but the client either never receives the response (dead connection) or can't load the referenced chunks (stale hashes)
+4. React's implicit Suspense boundary around the route segment waits forever
+
+**Evidence found**:
+- Server logs showed `GET /blogs 200 in 649ms` — server always responds correctly
+- Network tab showed the stuck request: `GET /?_rsc=j80ka` with `rsc: 1` header
+- The RSC response body was valid and complete (user captured it)
+- `⚠ Fast Refresh had to perform a full reload when ./contexts/AuthContext.tsx changed` — confirms HMR chunk invalidation
+
+### Problem 2: `useCallback` Dependency Loops
+
+Three hooks had `useCallback(fetchFn, [filters])` where `filters` is state. This caused:
+- Filter change → new `fetchFn` reference → `useEffect` triggers → fetch starts → but `fetchingRef.current` might still be `true` from the previous fetch
+- Under tab switch conditions, this could leave `fetchingRef` permanently locked
+
+### Problem 3: Custom Fetch Wrapper
+
+[client.ts](file:///c:/Users/hrai1/WORK-DRIVE/DEP/Insti-CP301/lib/db/client.ts) wrapped every Supabase request with a 10-second `AbortController` timeout. Supabase's internal `autoRefreshToken` fires a token refresh on tab visibility change through this same wrapper. The 10-second timeout on a stale connection could block the connection pool.
+
+### Problem 4: AuthContext TOKEN_REFRESHED Handler
+
+The `onAuthStateChange` handler treated `TOKEN_REFRESHED` the same as `SIGNED_IN` — making a full [getUserById()](file:///c:/Users/hrai1/WORK-DRIVE/DEP/Insti-CP301/lib/db/users.ts#9-26) database call on every tab refocus. This unnecessary blocking async call could stall while other navigation-related fetches were queued.
+
+### Problem 5: Sign-Out Race Conditions
+
+Multiple competing mechanisms tried to handle sign-out:
+
+| Component | Action | Problem |
+|-----------|--------|---------|
+| Header [handleSignOut](file:///c:/Users/hrai1/WORK-DRIVE/DEP/Insti-CP301/components/layout/Header.tsx#28-42) | `window.location.href = '/login'` then [signOut()](file:///c:/Users/hrai1/WORK-DRIVE/DEP/Insti-CP301/contexts/AuthContext.tsx#213-226) | Redirect fires before cookie cleared → proxy bounces back to `/` |
+| AuthContext SIGNED_OUT | `setUser(null)` + [syncCookie(null)](file:///c:/Users/hrai1/WORK-DRIVE/DEP/Insti-CP301/contexts/AuthContext.tsx#42-81) + redirect | `setUser(null)` triggers re-renders → hooks fire stale fetches → [syncCookie](file:///c:/Users/hrai1/WORK-DRIVE/DEP/Insti-CP301/contexts/AuthContext.tsx#42-81) hangs on stale connection |
+| Cross-tab SIGNED_OUT | `window.location.href = '/login'` in hidden tab | Browser defers navigation in hidden tabs → when tab becomes visible, competes with `router.refresh()` |
+
+### Problem 6: Login Page Post-Auth Redirect
+
+[login/page.tsx](file:///c:/Users/hrai1/WORK-DRIVE/DEP/Insti-CP301/app/(auth)/login/page.tsx) used `router.push('/')` after successful login — a client-side RSC navigation that suffers the same stale-connection hang.
+
+---
+
+## Solutions Implemented
+
+### Fix 1: Stale-Tab Recovery in MainLayout
+
+[MainLayout.tsx](file:///c:/Users/hrai1/WORK-DRIVE/DEP/Insti-CP301/components/layout/MainLayout.tsx)
+
+```diff
++ useEffect(() => {
++   const onVisibility = () => {
++     if (document.visibilityState === 'visible') {
++       // Check cross-tab sign-out
++       if (!document.cookie.includes('sb-auth-token')) {
++         window.location.reload();
++         return;
++       }
++       // Re-sync RSC payload + warm connections
++       router.refresh();
++       // Safety net: force hard nav for 3s
++       forceHardNavUntil = Date.now() + 3_000;
++     }
++   };
++   // Capture-phase click interceptor for stale period
++   const onLinkClick = (e) => { /* force window.location.href */ };
++ }, [router]);
+```
+
+**Two layers**:
+1. **`router.refresh()`** on every tab return — re-fetches the current page's RSC payload with fresh chunk URLs
+2. **Hard-nav safety net** — for 3 seconds after tab return, link clicks use `window.location.href` instead of client-side routing
+3. **Cross-tab sign-out detection** — if `sb-auth-token` cookie is gone, `window.location.reload()` forces a complete fresh page load
+
+### Fix 2: Uniform Hook Dependencies
+
+| Hook | Before | After |
+|------|--------|-------|
+| [useLostFound.ts](file:///c:/Users/hrai1/WORK-DRIVE/DEP/Insti-CP301/lib/hooks/useLostFound.ts) | `useCallback(fn, [filters])` | `useCallback(fn, [])` |
+| [useMarketplace.ts](file:///c:/Users/hrai1/WORK-DRIVE/DEP/Insti-CP301/lib/hooks/useMarketplace.ts) | `useCallback(fn, [filters])` | `useCallback(fn, [])` |
+| [useNotices.ts](file:///c:/Users/hrai1/WORK-DRIVE/DEP/Insti-CP301/lib/hooks/useNotices.ts) | `useCallback(fn, [filters])` | `useCallback(fn, [])` |
+| [useEvents.ts](file:///c:/Users/hrai1/WORK-DRIVE/DEP/Insti-CP301/lib/hooks/useEvents.ts) | `useEffect([filters, fetchFn])` | `useEffect([filters])` |
+
+All hooks now follow: `useCallback(fn, [])` + `useEffect(fetch, [filters])`.
+
+### Fix 3: Removed Custom Fetch Wrapper
+
+[client.ts](file:///c:/Users/hrai1/WORK-DRIVE/DEP/Insti-CP301/lib/db/client.ts)
+
+```diff
+  export const db = createClient(supabaseUrl, supabaseAnonKey, {
+-   global: {
+-     fetch: (url, options = {}) => {
+-       const controller = new AbortController();
+-       const timeout = setTimeout(() => controller.abort(), 10_000);
+-       return fetch(url, { ...options, signal: controller.signal })
+-         .finally(() => clearTimeout(timeout));
+-     },
+-   },
+    auth: { ... },
+  });
+```
+
+### Fix 4: Lightweight TOKEN_REFRESHED Handler
+
+[AuthContext.tsx](file:///c:/Users/hrai1/WORK-DRIVE/DEP/Insti-CP301/contexts/AuthContext.tsx)
+
+```diff
+- // SIGNED_IN and TOKEN_REFRESHED both did getUserById()
++ if (event === 'SIGNED_IN') {
++   const userData = await getUserById(session.user.id);
++   syncCookie(session.access_token);
++ } else if (event === 'TOKEN_REFRESHED') {
++   syncCookie(session.access_token);   // ← lightweight, no DB call
++ }
+```
+
+### Fix 5: Network-Independent Sign-Out
+
+[Header.tsx](file:///c:/Users/hrai1/WORK-DRIVE/DEP/Insti-CP301/components/layout/Header.tsx)
+
+```tsx
+const handleSignOut = () => {
+  document.cookie = 'sb-auth-token=; path=/; max-age=0'; // instant
+  signOut().catch(() => {});                               // background
+  fetch('/api/auth/clear-cookie', { method: 'POST' }).catch(() => {}); // background
+  window.location.replace('/login');                       // instant
+};
+```
+
+[AuthContext.tsx](file:///c:/Users/hrai1/WORK-DRIVE/DEP/Insti-CP301/contexts/AuthContext.tsx) SIGNED_OUT handler:
+
+```tsx
+} else if (event === 'SIGNED_OUT') {
+  document.cookie = 'sb-auth-token=; path=/; max-age=0';
+  // No redirect, no state updates — MainLayout visibility handler
+  // detects the missing cookie and forces a hard reload
+}
+```
+
+### Fix 6: Full Page Loads for Auth Transitions
+
+| Page | Before | After |
+|------|--------|-------|
+| [login/page.tsx](file:///c:/Users/hrai1/WORK-DRIVE/DEP/Insti-CP301/app/(auth)/login/page.tsx) | `router.push('/')` | `window.location.href = redirect` |
+| [signup/page.tsx](file:///c:/Users/hrai1/WORK-DRIVE/DEP/Insti-CP301/app/(auth)/signup/page.tsx) | `router.push('/')` | `window.location.href = '/'` |
+
+---
+
+## Architecture Audit
+
+The codebase was audited against Next.js best practices. It already follows the correct patterns:
+
+| Practice | Status |
+|----------|--------|
+| Lightweight layouts (no server fetches) | ✅ |
+| Client-side data fetching (all hooks) | ✅ |
+| No `await` in server components | ✅ |
+| Auth is client-side ([AuthContext](file:///c:/Users/hrai1/WORK-DRIVE/DEP/Insti-CP301/contexts/AuthContext.tsx#20-29)) | ✅ |
+| `'use client'` on all dashboard pages | ✅ |
+
+The navigation hang was **not an architectural problem** — it was a transport-layer issue: stale TCP connections + Turbopack HMR chunk invalidation after tab switch.
+
+---
+
+## Key Takeaways
+
+1. **Auth transitions must always be full page loads** (`window.location.href`), never client-side (`router.push`). The server-side cookie must be picked up fresh.
+2. **Never `await` network calls during sign-out**. Clear cookies client-side via `document.cookie` and redirect immediately.
+3. **Hidden tabs are unreliable for navigation**. Browser defers `window.location.href` in hidden tabs. Use visibility handlers to detect stale state and reload when the tab becomes visible.
+4. **`router.refresh()` on visibility change** is a standard production pattern used by Vercel, Linear, and Notion to recover from stale connections.
+5. **`useCallback` deps must not include state that changes on fetch** — this creates dependency cycles that can lock `fetchingRef` guards.

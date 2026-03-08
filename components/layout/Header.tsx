@@ -26,11 +26,30 @@ export function Header({ onMenuClick }: HeaderProps) {
   const router = useRouter();
 
   const handleSignOut = () => {
-    // Redirect immediately — no visible transition
-    window.location.href = '/login';
-    // Cleanup runs in background while navigating
+    // 1. Clear auth cookie CLIENT-SIDE (instant, no network needed).
+    //    This ensures the proxy allows /login on the next request.
+    document.cookie = 'sb-auth-token=; path=/; max-age=0';
+
+    // 2. Clear Supabase local storage explicitly.
+    //    If we just rely on signOut() in the background, the redirect to
+    //    /login might happen before Supabase clears it, causing the login
+    //    page to auto-login.
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
+        localStorage.removeItem(key);
+      }
+    }
+
+    // 3. Fire server-side cleanup in background.
+    //    We explicitly DO NOT call Supabase's client-side signOut() here
+    //    because it attempts to acquire a Web Lock. Navigating away while
+    //    it holds the lock leaves the lock orphaned, causing a 5-second
+    //    delay on the /login page before it "steals" the broken lock.
     fetch('/api/auth/clear-cookie', { method: 'POST' }).catch(() => { });
-    signOut().catch(() => { });
+
+    // 4. Redirect immediately — always works, no lock issues.
+    window.location.replace('/login');
   };
 
   return (
