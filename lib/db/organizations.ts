@@ -116,6 +116,264 @@ export async function getOrgPositions(orgId: string): Promise<UserPosition[]> {
     return (data ?? []).map(mapUserPosition);
 }
 
+// ========================
+// ADMIN FUNCTIONS
+// ========================
+
+/**
+ * Create a new organization (Admin only)
+ * NOTE: All optional params are sent as explicit null to avoid PostgREST
+ *       signature-mismatch errors when undefined values are stripped.
+ */
+export async function createOrganization(data: Partial<Organization>): Promise<Organization | null> {
+    const { data: newOrg, error } = await db
+        .rpc('admin_create_organization', {
+            p_name: data.name ?? null,
+            p_slug: data.slug ?? null,
+            p_type: data.type ?? null,
+            p_parent_id: data.parentId ?? null,
+            p_description: data.description ?? null,
+            p_logo_url: data.logoUrl ?? null,
+            p_email: data.email ?? null,
+            p_social_links: data.socialLinks ?? null,
+            p_founded_year: data.foundedYear ?? null,
+            p_is_active: data.isActive ?? true,
+        });
+
+    if (error) throw new Error(`[createOrganization] ${error.message}`);
+    return newOrg ? mapOrganization(newOrg) : null;
+}
+
+/**
+ * Update an organization (Admin only)
+ * NOTE: All optional params are sent as explicit null to avoid PostgREST
+ *       signature-mismatch errors when undefined values are stripped.
+ */
+export async function updateOrganization(id: string, data: Partial<Organization>): Promise<Organization | null> {
+    const { data: updatedOrg, error } = await db
+        .rpc('admin_update_organization', {
+            p_id: id,
+            p_name: data.name ?? null,
+            p_slug: data.slug ?? null,
+            p_type: data.type ?? null,
+            p_parent_id: data.parentId ?? null,
+            p_description: data.description ?? null,
+            p_logo_url: data.logoUrl ?? null,
+            p_email: data.email ?? null,
+            p_social_links: data.socialLinks ?? null,
+            p_founded_year: data.foundedYear ?? null,
+            p_is_active: data.isActive ?? null,
+        });
+
+    if (error) throw new Error(`[updateOrganization] ${error.message}`);
+    return updatedOrg ? mapOrganization(updatedOrg) : null;
+}
+
+/**
+ * Assign a Position of Responsibility (POR) to a user (Admin only)
+ * NOTE: Optional params sent as explicit null to avoid PostgREST overload-resolution failures.
+ */
+export async function assignUserPosition(data: Omit<UserPosition, 'id' | 'createdAt' | 'org' | 'user'>): Promise<UserPosition | null> {
+    // Safely derive a date string from validFrom (may be ISO datetime or date-only)
+    const validFromDate = data.validFrom
+        ? data.validFrom.substring(0, 10)
+        : new Date().toISOString().substring(0, 10);
+
+    const { data: newPosition, error } = await db
+        .rpc('admin_assign_por', {
+            p_user_id: data.userId,
+            p_org_id: data.orgId,
+            p_title: data.title,
+            p_por_type: data.porType,
+            p_valid_from: validFromDate,
+            p_valid_until: data.validUntil ? data.validUntil.substring(0, 10) : null,
+            p_is_active: data.isActive ?? true,
+        });
+
+    if (error) throw new Error(`[assignUserPosition] ${error.message}`);
+
+    // Since RPC doesn't do joins, fetch the fully-joined position after creation
+    if (newPosition) {
+        const { data: joinedPosition } = await db
+            .from('user_positions')
+            .select(`
+                id, user_id, org_id, title, por_type, valid_from, valid_until, is_active, created_at,
+                user:users!user_positions_user_id_fkey(id, email, full_name, role, profile_picture_url),
+                org:organizations(id, name, slug, type, parent_id, logo_url, is_active)
+            `)
+            .eq('id', newPosition.id)
+            .single();
+        return joinedPosition ? mapUserPosition(joinedPosition) : mapUserPosition(newPosition);
+    }
+    return null;
+}
+
+/**
+ * Revoke or expire a User Position (Admin only)
+ */
+export async function revokeUserPosition(positionId: string): Promise<boolean> {
+    const { data: success, error } = await db
+        .rpc('admin_revoke_por', {
+            p_position_id: positionId
+        });
+
+    if (error) throw new Error(`[revokeUserPosition] ${error.message}`);
+    return !!success;
+}
+
+/**
+ * Upsert an organization via CSV row (Admin only, idempotent by slug).
+ * Uses parent_slug so CSV files stay human-readable.
+ */
+export async function upsertOrganization(row: {
+    name: string;
+    slug: string;
+    type: string;
+    parent_slug?: string;
+    description?: string;
+    logo_url?: string;
+    email?: string;
+    founded_year?: number;
+    is_active?: boolean;
+}): Promise<Organization | null> {
+    const { data: org, error } = await db
+        .rpc('admin_upsert_organization', {
+            p_name: row.name,
+            p_slug: row.slug,
+            p_type: row.type,
+            p_parent_slug: row.parent_slug ?? null,
+            p_description: row.description ?? null,
+            p_logo_url: row.logo_url ?? null,
+            p_email: row.email ?? null,
+            p_founded_year: row.founded_year ?? null,
+            p_is_active: row.is_active ?? true,
+        });
+
+    if (error) throw new Error(`[upsertOrganization:${row.slug}] ${error.message}`);
+    return org ? mapOrganization(org) : null;
+}
+
+/**
+ * Get ALL members across all orgs (Admin only) — used for bulk CSV export.
+ * Joins user and org info so the download includes full names, emails, org slugs.
+ */
+export async function getAllOrgMembers(): Promise<OrgMember[]> {
+    const { data, error } = await db
+        .from('org_members')
+        .select(`
+            id, org_id, user_id, status, joined_at,
+            user:users!org_members_user_id_fkey(id, email, full_name, role, profile_picture_url),
+            org:organizations(id, name, slug, type, parent_id, logo_url, is_active)
+        `)
+        .eq('status', 'approved')
+        .order('joined_at', { ascending: false });
+
+    if (error) throw new Error(`[getAllOrgMembers] ${error.message}`);
+    return (data ?? []).map(mapOrgMember);
+}
+
+/**
+ * Get ALL positions (PORs) across all orgs (Admin only) — used for bulk CSV export.
+ */
+export async function getAllOrgPositions(): Promise<UserPosition[]> {
+    const { data, error } = await db
+        .from('user_positions')
+        .select(`
+            id, user_id, org_id, title, por_type, valid_from, valid_until, is_active, created_at,
+            user:users!user_positions_user_id_fkey(id, email, full_name, role, profile_picture_url),
+            org:organizations(id, name, slug, type, parent_id, logo_url, is_active)
+        `)
+        .order('created_at', { ascending: false });
+
+    if (error) throw new Error(`[getAllOrgPositions] ${error.message}`);
+    return (data ?? []).map(mapUserPosition);
+}
+
+/**
+ * Upsert an org member by user email + org slug (Admin only — CSV bulk import).
+ * NOTE: All params sent as explicit null to prevent PostgREST signature mismatch.
+ */
+export async function upsertMemberByEmail(row: {
+    user_email: string;
+    org_slug: string;
+    status?: string;
+}): Promise<boolean> {
+    const { error } = await db
+        .rpc('admin_upsert_member', {
+            p_user_email: row.user_email,
+            p_org_slug: row.org_slug,
+            p_status: row.status ?? 'approved',
+        });
+
+    if (error) throw new Error(`[upsertMemberByEmail:${row.user_email}@${row.org_slug}] ${error.message}`);
+    return true;
+}
+
+/**
+ * Upsert a POR by user email + org slug + title (Admin only — CSV bulk import).
+ * NOTE: All params sent as explicit null to prevent PostgREST signature mismatch.
+ */
+export async function upsertPORByEmail(row: {
+    user_email: string;
+    org_slug: string;
+    title: string;
+    por_type?: string;
+    valid_from?: string;
+    valid_until?: string;
+    is_active?: boolean;
+}): Promise<boolean> {
+    const { error } = await db
+        .rpc('admin_upsert_por', {
+            p_user_email: row.user_email,
+            p_org_slug: row.org_slug,
+            p_title: row.title,
+            p_por_type: row.por_type ?? 'custom',
+            p_valid_from: row.valid_from ? row.valid_from.substring(0, 10) : null,
+            p_valid_until: row.valid_until ? row.valid_until.substring(0, 10) : null,
+            p_is_active: row.is_active ?? true,
+        });
+
+    if (error) throw new Error(`[upsertPORByEmail:${row.user_email}] ${error.message}`);
+    return true;
+}
+
+/**
+ * Add a member to an organization (Admin only)
+ */
+export async function addOrgMember(orgId: string, userId: string): Promise<OrgMember | null> {
+    const { data, error } = await db
+        .from('org_members')
+        .insert({
+            org_id: orgId,
+            user_id: userId,
+            status: 'approved',
+        })
+        .select(`
+            id, org_id, user_id, status, joined_at,
+            user:users!org_members_user_id_fkey(id, email, full_name, role, profile_picture_url)
+        `)
+        .single();
+
+    if (error) throw new Error(`[addOrgMember] ${error.message}`);
+    return data ? mapOrgMember(data) : null;
+}
+
+/**
+ * Remove a member from an organization (Admin only)
+ */
+export async function removeOrgMember(orgId: string, userId: string): Promise<boolean> {
+    const { error } = await db
+        .from('org_members')
+        .update({
+            status: 'removed',
+        })
+        .eq('org_id', orgId)
+        .eq('user_id', userId);
+
+    if (error) throw new Error(`[removeOrgMember] ${error.message}`);
+    return true;
+}
+
 /**
  * Map database row to Organization type
  */

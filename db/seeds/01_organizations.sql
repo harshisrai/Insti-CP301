@@ -74,12 +74,10 @@ ON CONFLICT (slug) DO NOTHING;
 
 -- Independent Societies
 INSERT INTO organizations (name, slug, type, parent_id, description, is_active) VALUES
-('ACE',                  'ace',             'society', '00000000-0000-0000-0000-000000000001', 'Association of Civil Engineers.', true),
 ('E-Cell',               'e-cell',          'society', '00000000-0000-0000-0000-000000000001', 'Entrepreneurship Cell.', true),
 ('ENACTUS',              'enactus',         'society', '00000000-0000-0000-0000-000000000001', 'Social entrepreneurship.', true),
 ('Pehchaan-Ek Safar',    'pehchaan',        'society', '00000000-0000-0000-0000-000000000001', 'Social welfare society.', true),
 ('SME',                  'sme',             'society', '00000000-0000-0000-0000-000000000001', 'Society of Mechanical Engineers.', true),
 ('Women''s Forum / SWE', 'womens-forum',    'society', '00000000-0000-0000-0000-000000000001', 'Women in STEM advocacy.', true),
-('BloodConnect',         'bloodconnect',    'society', '00000000-0000-0000-0000-000000000001', 'Blood donation drives.', true),
-('ISMP Body',            'ismp-body',       'society', '00000000-0000-0000-0000-000000000001', 'Institute Student Mentorship Programme.', true)
+('ISMP',            'ismp',       'society', '00000000-0000-0000-0000-000000000001', 'Institute Student Mentorship Programme.', true)
 ON CONFLICT (slug) DO NOTHING;

@@ -72,6 +72,60 @@ export async function updateUserProfile(userId: string, updates: Partial<User>):
   return data ? mapUser(data) : null;
 }
 
+// ========================
+// ADMIN FUNCTIONS
+// ========================
+
+/**
+ * Get all users (Admin only)
+ */
+export async function getAllUsers(): Promise<User[]> {
+  const { data, error } = await db
+    .from('users')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(`[getAllUsers] ${error.message}`);
+  return data ? data.map(mapUser) : [];
+}
+
+/**
+ * Update user role (Admin only)
+ */
+export async function updateUserRole(userId: string, role: string, isAdmin: boolean): Promise<User | null> {
+  const { data, error } = await db
+    .from('users')
+    .update({
+      role,
+      is_admin: isAdmin,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', userId)
+    .select('*')
+    .single();
+
+  if (error) throw new Error(`[updateUserRole] ${error.message}`);
+  return data ? mapUser(data) : null;
+}
+
+/**
+ * Update user status (Admin only)
+ */
+export async function updateUserStatus(userId: string, status: string): Promise<User | null> {
+  const { data, error } = await db
+    .from('users')
+    .update({
+      status,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', userId)
+    .select('*')
+    .single();
+
+  if (error) throw new Error(`[updateUserStatus] ${error.message}`);
+  return data ? mapUser(data) : null;
+}
+
 /**
  * Map database row to User type
  */

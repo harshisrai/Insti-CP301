@@ -48,10 +48,6 @@ INSERT INTO locations (name, code, type, facilities, is_accessible, opening_time
 ('Administrative Block', 'ADMIN', 'administrative',
  ARRAY['AC', 'WiFi', 'Dean Offices', 'T&P Cell', 'Main Office'], true, '09:00', '17:00'),
 
--- Mess
-('Main Mess', 'MESS-1', 'mess',
- ARRAY['Veg', 'Non-Veg', 'RO Water'], true, '07:30', '21:30'),
-
 -- Food Court
 ('Food Court', 'FOOD', 'recreational',
  ARRAY['Kerala Canteen', 'Burger House', 'Juice Corner', 'Cafeteria'], true, '08:00', '22:00'),

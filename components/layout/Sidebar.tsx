@@ -20,6 +20,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
+import { Shield } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -42,6 +43,7 @@ const MAIN_LINKS = [
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const { user } = useAuth();
 
   return (
     <>
@@ -90,6 +92,28 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 </Link>
               );
             })}
+
+            {/* Admin Link (Only for admins) */}
+            {user?.isAdmin && (
+              <>
+                <div className="pt-4 pb-2">
+                  <div className="h-px bg-sidebar-border w-full" />
+                </div>
+                <Link
+                  href="/admin"
+                  onClick={onClose}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                    pathname.startsWith('/admin')
+                      ? 'bg-rose-500/10 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400'
+                      : 'text-sidebar-foreground hover:bg-sidebar-accent/50'
+                  )}
+                >
+                  <Shield size={18} className={pathname.startsWith('/admin') ? '' : 'text-rose-500'} />
+                  Admin Portal
+                </Link>
+              </>
+            )}
           </nav>
         </div>
       </aside>

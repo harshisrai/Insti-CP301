@@ -34,6 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const isInitialized = React.useRef(false);
+  const fetchingUserRef = React.useRef(false);
 
   // Concurrency lock for syncCookie — prevents overlapping requests
   const syncingRef = React.useRef(false);
@@ -124,20 +125,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Step 2: Listen for auth changes — THIS is the single source of truth for cookie sync
     const {
       data: { subscription },
-    } = db.auth.onAuthStateChange(async (event, session) => {
+    } = db.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN') {
         // Full user load only on actual sign-in (not token refresh)
         if (session) {
-          const userData = await getUserById(session.user.id);
-          if (userData) setUser(userData);
-          syncCookie(session.access_token);
+          if (!fetchingUserRef.current) {
+            fetchingUserRef.current = true;
+            void (async () => {
+              try {
+                const userData = await getUserById(session.user.id);
+                if (userData) setUser(userData);
+              } finally {
+                fetchingUserRef.current = false;
+              }
+            })();
+          }
+          void syncCookie(session.access_token);
         }
       } else if (event === 'TOKEN_REFRESHED') {
         // Token rotated (e.g. tab regained focus) — only sync the cookie.
-        // Do NOT re-fetch user from DB; user data hasn't changed,
-        // and the DB call can hang and block subsequent navigation.
+        // Do NOT re-fetch user from DB; user data hasn't changed.
         if (session) {
-          syncCookie(session.access_token);
+          void syncCookie(session.access_token);
         }
       } else if (event === 'SIGNED_OUT') {
         // Clear cookie client-side (instant, no network).
@@ -146,6 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // handler detects the missing cookie and forces a hard reload
         // when the tab becomes visible.
         document.cookie = 'sb-auth-token=; path=/; max-age=0';
+        setUser(null);
       }
       // INITIAL_SESSION is handled by checkAuth above — no action needed here
     });
