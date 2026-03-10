@@ -10,8 +10,8 @@ import {
     upsertOrganization,
     getAllOrgMembers,
     getAllOrgPositions,
-    upsertMemberByEmail,
-    upsertPORByEmail,
+    upsertMemberByEntry,
+    upsertPORByEntry,
     assignUserPosition,
     revokeUserPosition,
     addOrgMember,
@@ -156,17 +156,17 @@ export function useAdmin() {
     type BulkResult = { succeeded: number; failed: { row: string; reason: string }[] };
 
     const bulkUpsertMembers = useCallback(async (
-        rows: Parameters<typeof upsertMemberByEmail>[0][]
+        rows: Parameters<typeof upsertMemberByEntry>[0][]
     ): Promise<BulkResult> => {
         setLoading(true);
         let succeeded = 0;
         const failed: BulkResult['failed'] = [];
         for (const row of rows) {
             try {
-                await upsertMemberByEmail(row);
+                await upsertMemberByEntry(row);
                 succeeded++;
             } catch (err) {
-                failed.push({ row: `${row.user_email}@${row.org_slug}`, reason: err instanceof Error ? err.message : 'Unknown' });
+                failed.push({ row: `${row.entry_number}@${row.org_slug}`, reason: err instanceof Error ? err.message : 'Unknown' });
             }
         }
         if (mountedRef.current) setLoading(false);
@@ -174,17 +174,17 @@ export function useAdmin() {
     }, []);
 
     const bulkUpsertPORs = useCallback(async (
-        rows: Parameters<typeof upsertPORByEmail>[0][]
+        rows: Parameters<typeof upsertPORByEntry>[0][]
     ): Promise<BulkResult> => {
         setLoading(true);
         let succeeded = 0;
         const failed: BulkResult['failed'] = [];
         for (const row of rows) {
             try {
-                await upsertPORByEmail(row);
+                await upsertPORByEntry(row);
                 succeeded++;
             } catch (err) {
-                failed.push({ row: `${row.user_email}@${row.org_slug}`, reason: err instanceof Error ? err.message : 'Unknown' });
+                failed.push({ row: `${row.entry_number}@${row.org_slug}`, reason: err instanceof Error ? err.message : 'Unknown' });
             }
         }
         if (mountedRef.current) setLoading(false);

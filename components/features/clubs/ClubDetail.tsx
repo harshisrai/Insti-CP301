@@ -15,7 +15,8 @@ export function ClubDetail() {
     const params = useParams();
     const router = useRouter();
     const slug = typeof params?.slug === 'string' ? params.slug : null;
-    const { org, members, positions, loading, error } = useOrganizationDetail(slug);
+    const { org, members, positions, children, loading, error } = useOrganizationDetail(slug);
+    const isParentBody = org?.type === 'board' || org?.type === 'governance_body';
 
     if (loading) {
         return (
@@ -81,10 +82,10 @@ export function ClubDetail() {
             {positions.length > 0 && (
                 <div>
                     <h2 className="text-xl font-bold font-serif tracking-tight mb-4 flex items-center gap-2">
-                        <ShieldCheck className="w-5 h-5 text-accent-gold" /> Office Bearers
+                        <ShieldCheck className="w-5 h-5 text-accent-gold" /> {isParentBody ? 'General Secretary' : 'Office Bearers'}
                     </h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                        {positions.map(pos => (
+                        {(isParentBody ? positions.filter(p => p.title.toLowerCase().includes('general secretary') || p.title.toLowerCase().includes('gsec')) : positions).map(pos => (
                             <GlassSurface key={pos.id} className="p-4 flex items-center gap-3">
                                 <Avatar className="h-10 w-10 border border-border">
                                     <AvatarImage src={pos.user?.profilePictureUrl} />
@@ -100,8 +101,35 @@ export function ClubDetail() {
                 </div>
             )}
 
-            {/* Members */}
-            {members.length > 0 && (
+            {/* Child Organizations (For Boards/Governance Bodies) */}
+            {isParentBody && children && children.length > 0 && (
+                <div>
+                    <h2 className="text-xl font-bold font-serif tracking-tight mb-4 flex items-center gap-2">
+                        <Users className="w-5 h-5 text-accent-cyan" /> Associated Clubs
+                    </h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {children.map(child => (
+                            <Link key={child.id} href={`/clubs/${child.slug}`}>
+                                <GlassSurface className="p-4 flex items-center gap-3 hover:border-accent-cyan/50 transition-colors cursor-pointer h-full">
+                                    <Avatar className="h-12 w-12 border-2 border-border shrink-0">
+                                        <AvatarImage src={child.logoUrl} />
+                                        <AvatarFallback className="bg-zinc-200 dark:bg-zinc-800 font-bold">{getInitials(child.name)}</AvatarFallback>
+                                    </Avatar>
+                                    <div className="min-w-0">
+                                        <p className="font-semibold text-foreground truncate">{child.name}</p>
+                                        <Badge variant="secondary" className="text-[9px] uppercase mt-1">
+                                            {child.type.replace('_', ' ')}
+                                        </Badge>
+                                    </div>
+                                </GlassSurface>
+                            </Link>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Members (Hide for Boards) */}
+            {!isParentBody && members.length > 0 && (
                 <div>
                     <h2 className="text-xl font-bold font-serif tracking-tight mb-4 flex items-center gap-2">
                         <Users className="w-5 h-5" /> Members <span className="text-sm font-normal text-muted-foreground">({members.length})</span>
@@ -122,10 +150,10 @@ export function ClubDetail() {
                 </div>
             )}
 
-            {positions.length === 0 && members.length === 0 && (
+            {positions.length === 0 && members.length === 0 && (!isParentBody || children?.length === 0) && (
                 <GlassSurface className="p-8 text-center">
                     <Users className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-50" />
-                    <p className="text-muted-foreground">No members or office bearers listed yet.</p>
+                    <p className="text-muted-foreground">No members, office bearers, or child organizations listed yet.</p>
                 </GlassSurface>
             )}
         </div>

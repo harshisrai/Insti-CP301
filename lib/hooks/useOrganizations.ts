@@ -4,7 +4,7 @@
 // ============================================================
 
 import { useState, useCallback, useEffect } from 'react';
-import { getOrganizations, getOrganizationBySlug, getOrgMembers, getOrgPositions } from '@/lib/db/organizations';
+import { getOrganizations, getOrganizationBySlug, getOrgMembers, getOrgPositions, getChildOrganizations } from '@/lib/db/organizations';
 import type { Organization, OrgMember, UserPosition, OrgType } from '@/lib/types';
 
 export function useOrganizations(typeFilter?: OrgType) {
@@ -47,6 +47,7 @@ export function useOrganizationDetail(slug: string | null) {
     const [org, setOrg] = useState<Organization | null>(null);
     const [members, setMembers] = useState<OrgMember[]>([]);
     const [positions, setPositions] = useState<UserPosition[]>([]);
+    const [children, setChildren] = useState<Organization[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -64,13 +65,15 @@ export function useOrganizationDetail(slug: string | null) {
                 setOrg(orgData);
 
                 if (orgData) {
-                    const [membersData, positionsData] = await Promise.all([
+                    const [membersData, positionsData, childrenData] = await Promise.all([
                         getOrgMembers(orgData.id),
                         getOrgPositions(orgData.id),
+                        getChildOrganizations(orgData.id)
                     ]);
                     if (isMounted) {
                         setMembers(membersData);
                         setPositions(positionsData);
+                        setChildren(childrenData);
                     }
                 }
             } catch (err: any) {
@@ -84,5 +87,5 @@ export function useOrganizationDetail(slug: string | null) {
         return () => { isMounted = false; };
     }, [slug]);
 
-    return { org, members, positions, loading, error };
+    return { org, members, positions, children, loading, error };
 }

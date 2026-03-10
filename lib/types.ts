@@ -18,6 +18,7 @@ export type LFCategory = 'electronics' | 'documents' | 'accessories' | 'clothing
 export type LFStatus = 'lost' | 'found' | 'claimed' | 'returned';
 export type NoticeCategory = 'academic' | 'administrative' | 'placement' | 'hostel' | 'sports' | 'wellness' | 'general';
 export type NoticePriority = 'urgent' | 'high' | 'medium' | 'low';
+export type NoticeStatus = 'draft' | 'published' | 'archived';
 export type LocationType = 'academic' | 'hostel' | 'administrative' | 'recreational' | 'mess' | 'medical' | 'sports' | 'other';
 export type OrgType = 'governance_body' | 'board' | 'club' | 'society' | 'fest_committee';
 export type MembershipStatus = 'pending' | 'approved' | 'removed';
@@ -249,6 +250,7 @@ export interface Notice {
   content: string;
   category: NoticeCategory;
   priority: NoticePriority;
+  status: NoticeStatus;
   tags: string[];
   targetRoles: string[];
   targetDepartments: string[];

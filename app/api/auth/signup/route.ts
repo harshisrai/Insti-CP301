@@ -4,7 +4,7 @@ import { db } from '@/lib/db';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { full_name, email, password, role, department, batch } = body;
+    const { full_name, email, password, role, department, batch, entry_number } = body;
 
     // Validate required fields
     if (!full_name || !email || !password || !role) {
@@ -52,6 +52,7 @@ export async function POST(request: Request) {
     }
 
     // Create user profile using RPC
+    const isStudent = role === 'student' || role === 'alumni';
     const { error: profileError } = await db.rpc('create_user_profile', {
       p_id: authData.user.id,
       p_email: email,
@@ -59,6 +60,8 @@ export async function POST(request: Request) {
       p_role: role,
       p_department: department || null,
       p_batch: batch || null,
+      p_enrollment_number: isStudent ? (entry_number || null) : null,
+      p_employee_id: !isStudent ? (entry_number || null) : null,
     });
 
     if (profileError) {

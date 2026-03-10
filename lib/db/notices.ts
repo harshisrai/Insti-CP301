@@ -6,27 +6,33 @@
 import { db } from './client';
 import { mapUser } from './users';
 import { mapUserPosition } from './organizations';
-import type { Notice, NoticeCategory, NoticePriority, PaginationParams, PaginatedResponse } from '@/lib/types';
+import type { Notice, NoticeCategory, NoticePriority, NoticeStatus, PaginationParams, PaginatedResponse } from '@/lib/types';
 
 export interface GetNoticesFilters extends PaginationParams {
     category?: NoticeCategory | 'all';
     priority?: NoticePriority;
+    status?: NoticeStatus | 'all';
     isActive?: boolean;
+    userContext?: {
+        role: string;
+        department?: string | null;
+        batch?: string | null;
+    };
 }
 
 /**
- * Fetch notices with pagination and optional filters
+ * Fetch notices with pagination and user visibility logic
  */
 export async function getNotices(filters: GetNoticesFilters = {}): Promise<PaginatedResponse<Notice>> {
-    const { page = 1, limit = 20, category, priority, isActive = true } = filters;
+    const { page = 1, limit = 20, category, priority, status = 'published', isActive = true, userContext } = filters;
     const start = (page - 1) * limit;
-    const end = start + limit - 1;
+    const end = start + limit; // Up to 'end' (exclusive)
 
     let query = db
         .from('notices')
         .select(`
-      id, posted_by, posting_identity_id, title,
-      category, priority, tags, target_roles, target_departments, target_batches,
+      id, posted_by, posting_identity_id, title, content,
+      category, priority, status, tags, target_roles, target_departments, target_batches,
       attachments, is_active, is_pinned, valid_from, valid_until,
       created_at, updated_at,
       poster:users!notices_posted_by_fkey(id, full_name, role, profile_picture_url),
@@ -34,9 +40,9 @@ export async function getNotices(filters: GetNoticesFilters = {}): Promise<Pagin
         id, title, por_type, is_active,
         org:organizations(id, name, slug, type, logo_url)
       )
-    `, { count: 'estimated' });
+    `);
 
-    // Apply filters
+    // Fetch all active records to filter in-memory since array overlaps are complex in PostgREST
     if (isActive !== undefined) {
         query = query.eq('is_active', isActive);
 
@@ -54,24 +60,52 @@ export async function getNotices(filters: GetNoticesFilters = {}): Promise<Pagin
         query = query.eq('priority', priority);
     }
 
+    if (status && status !== 'all') {
+        query = query.eq('status', status);
+    }
+
     query = query
         .order('is_pinned', { ascending: false })
-        .order('created_at', { ascending: false })
-        .range(start, end);
+        .order('created_at', { ascending: false });
 
-    const { data, error, count } = await query;
+    const { data: rawData, error } = await query;
 
     if (error) {
         console.warn(`[getNotices] ${error.message}`);
         return { data: [], total: 0, page, limit, hasMore: false };
     }
 
+    let filteredNotices = (rawData ?? []).map(mapNotice);
+
+    // Apply User Targeting Visibility Logic
+    if (userContext) {
+        filteredNotices = filteredNotices.filter((notice) => {
+            const { targetRoles, targetDepartments, targetBatches } = notice;
+
+            // If arrays are empty, it's public globally
+            const matchesRole = !targetRoles?.length || targetRoles.includes(userContext.role);
+            const matchesDept = !targetDepartments?.length || (userContext.department && targetDepartments.includes(userContext.department));
+            const matchesBatch = !targetBatches?.length || (userContext.batch && targetBatches.includes(userContext.batch));
+
+            // Must match all defined conditions
+            let isVisible = true;
+            if (targetRoles?.length && !matchesRole) isVisible = false;
+            if (targetDepartments?.length && !matchesDept) isVisible = false;
+            if (targetBatches?.length && !matchesBatch) isVisible = false;
+
+            return isVisible;
+        });
+    }
+
+    // Apply pagination in memory
+    const paginatedNotices = filteredNotices.slice(start, end);
+
     return {
-        data: (data ?? []).map(mapNotice),
-        total: count ?? 0,
+        data: paginatedNotices,
+        total: filteredNotices.length,
         page,
         limit,
-        hasMore: count ? start + limit < count : false,
+        hasMore: end < filteredNotices.length,
     };
 }
 
@@ -90,6 +124,7 @@ export async function createNotice(
             content: noticeData.content,
             category: noticeData.category || 'general',
             priority: noticeData.priority || 'medium',
+            status: noticeData.status || 'published',
             tags: noticeData.tags || [],
             target_roles: noticeData.targetRoles || [],
             target_departments: noticeData.targetDepartments || [],
@@ -111,6 +146,83 @@ export async function createNotice(
         .single();
 
     if (error) throw new Error(`[createNotice] ${error.message}`);
+    return data ? mapNotice(data) : null;
+}
+
+/**
+ * Fetch a single notice by ID
+ */
+export async function getNotice(noticeId: string): Promise<Notice | null> {
+    const { data, error } = await db
+        .from('notices')
+        .select(`
+      *,
+      poster:users!notices_posted_by_fkey(id, email, full_name, role, profile_picture_url),
+      postingIdentity:user_positions!notices_posting_identity_id_fkey(
+        id, title, por_type, valid_from, valid_until, is_active,
+        org:organizations(id, name, slug, type, logo_url)
+      )
+    `)
+        .eq('id', noticeId)
+        .single();
+
+    if (error) {
+        console.warn(`[getNotice] ${error.message}`);
+        return null;
+    }
+    return data ? mapNotice(data) : null;
+}
+
+/**
+ * Update an existing notice
+ */
+export async function updateNotice(
+    noticeId: string,
+    noticeData: Partial<Notice>
+): Promise<Notice | null> {
+    const updatePayload: any = {
+        updated_at: new Date().toISOString(),
+    };
+
+    // If publishing, check if transitioning from draft to update valid_from
+    if (noticeData.status === 'published') {
+        const { data: current } = await db.from('notices').select('status').eq('id', noticeId).single();
+        if (current?.status === 'draft') {
+            updatePayload.valid_from = new Date().toISOString();
+        }
+    }
+
+    if (noticeData.title !== undefined) updatePayload.title = noticeData.title;
+    if (noticeData.content !== undefined) updatePayload.content = noticeData.content;
+    if (noticeData.category !== undefined) updatePayload.category = noticeData.category;
+    if (noticeData.priority !== undefined) updatePayload.priority = noticeData.priority;
+    if (noticeData.status !== undefined) updatePayload.status = noticeData.status;
+    if (noticeData.postingIdentityId !== undefined) updatePayload.posting_identity_id = noticeData.postingIdentityId || null;
+    if (noticeData.tags !== undefined) updatePayload.tags = noticeData.tags;
+    if (noticeData.targetRoles !== undefined) updatePayload.target_roles = noticeData.targetRoles;
+    if (noticeData.targetDepartments !== undefined) updatePayload.target_departments = noticeData.targetDepartments;
+    if (noticeData.targetBatches !== undefined) updatePayload.target_batches = noticeData.targetBatches;
+    if (noticeData.attachments !== undefined) updatePayload.attachments = noticeData.attachments;
+    if (noticeData.isActive !== undefined) updatePayload.is_active = noticeData.isActive;
+    if (noticeData.isPinned !== undefined) updatePayload.is_pinned = noticeData.isPinned;
+    if (noticeData.validFrom !== undefined) updatePayload.valid_from = noticeData.validFrom;
+    if (noticeData.validUntil !== undefined) updatePayload.valid_until = noticeData.validUntil;
+
+    const { data, error } = await db
+        .from('notices')
+        .update(updatePayload)
+        .eq('id', noticeId)
+        .select(`
+      *,
+      poster:users!notices_posted_by_fkey(id, email, full_name, role, profile_picture_url),
+      postingIdentity:user_positions!notices_posting_identity_id_fkey(
+        id, title, por_type, valid_from, valid_until, is_active,
+        org:organizations(id, name, slug, type, logo_url)
+      )
+    `)
+        .single();
+
+    if (error) throw new Error(`[updateNotice] ${error.message}`);
     return data ? mapNotice(data) : null;
 }
 
@@ -140,6 +252,7 @@ export function mapNotice(row: any): Notice {
         content: row.content,
         category: row.category,
         priority: row.priority,
+        status: row.status || 'published',
         tags: row.tags || [],
         targetRoles: row.target_roles || [],
         targetDepartments: row.target_departments || [],

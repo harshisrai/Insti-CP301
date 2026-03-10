@@ -20,6 +20,7 @@ export default function SignupPage() {
     role: 'student' as UserRole,
     department: '',
     batch: '',
+    entry_number: '',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -28,7 +29,7 @@ export default function SignupPage() {
     const { name, value } = e.target
     setFormData((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: name === 'entry_number' ? value.toUpperCase() : value,
     }))
   }
 
@@ -54,6 +55,7 @@ export default function SignupPage() {
           role: formData.role,
           department: formData.department || undefined,
           batch: formData.batch || undefined,
+          entry_number: formData.entry_number || undefined,
         }),
       })
 
@@ -172,6 +174,27 @@ export default function SignupPage() {
                 <option key={dept} value={dept}>{dept}</option>
               ))}
             </select>
+          </div>
+
+          {/* Entry Number / Employee ID */}
+          <div>
+            <label htmlFor="entry_number" className="block text-sm font-medium text-foreground mb-2">
+              {formData.role === 'student' || formData.role === 'alumni' ? 'Enrollment Number' : 'Employee ID'}
+            </label>
+            <div className="relative">
+              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground pointer-events-none" />
+              <input
+                type="text"
+                id="entry_number"
+                name="entry_number"
+                value={formData.entry_number}
+                onChange={handleChange}
+                placeholder={formData.role === 'student' || formData.role === 'alumni' ? "e.g., 2022CSB1001" : "e.g., EMP12345"}
+                className="w-full pl-10 pr-4 py-2.5 border border-border rounded-lg bg-input text-foreground placeholder:text-muted-foreground placeholder:normal-case uppercase focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent transition-all"
+                required
+                disabled={loading}
+              />
+            </div>
           </div>
 
           {/* Batch (for students/alumni) */}

@@ -21,6 +21,17 @@ export function useNotices(initialFilters?: GetNoticesFilters) {
     const fetchingRef = useRef(false);
     const [filters, setFilters] = useState<GetNoticesFilters>(initialFilters || { limit: 15 });
 
+    // Sync external filters changes into the hook's state
+    useEffect(() => {
+        if (initialFilters) {
+            setFilters(prev => {
+                // Only update if there's an actual change to prevent infinite loops
+                const hasChanged = JSON.stringify(prev) !== JSON.stringify(initialFilters);
+                return hasChanged ? initialFilters : prev;
+            });
+        }
+    }, [initialFilters]);
+
     const fetchNotices = useCallback(async (isLoadMore = false, currentFilters?: GetNoticesFilters) => {
         if (fetchingRef.current) {
             return;
@@ -32,7 +43,14 @@ export function useNotices(initialFilters?: GetNoticesFilters) {
 
             const f = currentFilters || filters;
             const currentPage = isLoadMore ? pageRef.current + 1 : 1;
-            const response = await getNotices({ ...f, page: currentPage });
+
+            const userContext = user ? {
+                role: user.role,
+                department: user.department,
+                batch: user.batch
+            } : undefined;
+
+            const response = await getNotices({ ...f, page: currentPage, userContext });
 
             setNotices(prev => isLoadMore ? [...prev, ...response.data] : response.data);
             setHasMore(response.hasMore);

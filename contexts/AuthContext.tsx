@@ -7,8 +7,9 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { db } from '@/lib/db';
-import type { User, SignInRequest, SignUpRequest } from '@/lib/types';
+import type { User, SignInRequest, SignUpRequest, UserPosition } from '@/lib/types';
 import { getUserById } from '@/lib/db/users';
+import { getUserPositions } from '@/lib/db/organizations';
 
 // Routes that don't require authentication
 const PUBLIC_PATHS = ['/login', '/signup', '/forgot-password'];
@@ -19,6 +20,9 @@ function isPublicPath(pathname: string): boolean {
 
 interface AuthContextType {
   user: User | null;
+  activePositions: UserPosition[] | null;
+  selectedIdentityId: string | null;
+  setSelectedIdentityId: (id: string | null) => void;
   loading: boolean;
   error: string | null;
   signUp: (data: SignUpRequest) => Promise<void>;
@@ -31,6 +35,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [activePositions, setActivePositions] = useState<UserPosition[] | null>(null);
+  const [selectedIdentityId, setSelectedIdentityId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const isInitialized = React.useRef(false);
@@ -96,6 +102,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const userData = await getUserById(session.user.id);
           if (userData) {
             setUser(userData);
+            const positions = await getUserPositions(session.user.id);
+            setActivePositions(positions);
           } else {
             // They have a Supabase session but no profile in the DB.
             // This is a broken user state — force sign out.
@@ -134,7 +142,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             void (async () => {
               try {
                 const userData = await getUserById(session.user.id);
-                if (userData) setUser(userData);
+                if (userData) {
+                  setUser(userData);
+                  const positions = await getUserPositions(session.user.id);
+                  setActivePositions(positions);
+                }
               } finally {
                 fetchingUserRef.current = false;
               }
@@ -156,6 +168,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // when the tab becomes visible.
         document.cookie = 'sb-auth-token=; path=/; max-age=0';
         setUser(null);
+        setActivePositions(null);
+        setSelectedIdentityId(null);
       }
       // INITIAL_SESSION is handled by checkAuth above — no action needed here
     });
@@ -195,7 +209,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Load the created user
       const userData = await getUserById(authData.user.id);
-      if (userData) setUser(userData);
+      if (userData) {
+        setUser(userData);
+        const positions = await getUserPositions(authData.user.id);
+        setActivePositions(positions);
+      }
 
       // We MUST sync the cookie here and wait for it to finish, otherwise
       // the redirect on the signup page will happen before the cookie is set.
@@ -225,7 +243,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Load user profile
       const userData = await getUserById(authData.user.id);
-      if (userData) setUser(userData);
+      if (userData) {
+        setUser(userData);
+        const positions = await getUserPositions(authData.user.id);
+        setActivePositions(positions);
+      }
 
       // We MUST sync the cookie here and wait for it to finish, otherwise
       // the redirect on the login page will happen before the cookie is set.
@@ -279,6 +301,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
+        activePositions,
+        selectedIdentityId,
+        setSelectedIdentityId,
         loading,
         error,
         signUp,

@@ -81,15 +81,30 @@ export async function getOrganizationBySlug(slug: string): Promise<Organization 
 }
 
 /**
+ * Get all child organizations for a specific parent organization
+ */
+export async function getChildOrganizations(parentId: string): Promise<Organization[]> {
+    const { data, error } = await db
+        .from('organizations')
+        .select('*')
+        .eq('parent_id', parentId)
+        .eq('is_active', true)
+        .order('name');
+
+    if (error) throw new Error(`[getChildOrganizations] ${error.message}`);
+    return (data ?? []).map(mapOrganization);
+}
+
+/**
  * Get members of an organization
  */
 export async function getOrgMembers(orgId: string): Promise<OrgMember[]> {
     const { data, error } = await db
         .from('org_members')
         .select(`
-      id, org_id, user_id, status, joined_at,
-      user:users!org_members_user_id_fkey(id, email, full_name, role, profile_picture_url)
-    `)
+            id, org_id, user_id, status, joined_at,
+            user:users!org_members_user_id_fkey(id, email, full_name, role, profile_picture_url, enrollment_number, employee_id)
+        `)
         .eq('org_id', orgId)
         .eq('status', 'approved')
         .order('joined_at', { ascending: true });
@@ -105,9 +120,9 @@ export async function getOrgPositions(orgId: string): Promise<UserPosition[]> {
     const { data, error } = await db
         .from('user_positions')
         .select(`
-      id, user_id, org_id, title, por_type, valid_from, valid_until, is_active, created_at,
-      user:users!user_positions_user_id_fkey(id, email, full_name, role, profile_picture_url)
-    `)
+            id, user_id, org_id, title, por_type, valid_from, valid_until, is_active, created_at,
+            user:users!user_positions_user_id_fkey(id, email, full_name, role, profile_picture_url, enrollment_number, employee_id)
+        `)
         .eq('org_id', orgId)
         .eq('is_active', true)
         .order('por_type');
@@ -198,7 +213,7 @@ export async function assignUserPosition(data: Omit<UserPosition, 'id' | 'create
             .from('user_positions')
             .select(`
                 id, user_id, org_id, title, por_type, valid_from, valid_until, is_active, created_at,
-                user:users!user_positions_user_id_fkey(id, email, full_name, role, profile_picture_url),
+                user:users!user_positions_user_id_fkey(id, email, full_name, role, profile_picture_url, enrollment_number, employee_id),
                 org:organizations(id, name, slug, type, parent_id, logo_url, is_active)
             `)
             .eq('id', newPosition.id)
@@ -221,18 +236,17 @@ export async function revokeUserPosition(positionId: string): Promise<boolean> {
     return !!success;
 }
 
-/**
- * Upsert an organization via CSV row (Admin only, idempotent by slug).
- * Uses parent_slug so CSV files stay human-readable.
- */
+// upsertOrganization: Create or update an organization
 export async function upsertOrganization(row: {
+    id?: string;
     name: string;
     slug: string;
     type: string;
-    parent_slug?: string;
+    parent_id?: string;
     description?: string;
     logo_url?: string;
     email?: string;
+    social_links?: any;
     founded_year?: number;
     is_active?: boolean;
 }): Promise<Organization | null> {
@@ -241,12 +255,14 @@ export async function upsertOrganization(row: {
             p_name: row.name,
             p_slug: row.slug,
             p_type: row.type,
-            p_parent_slug: row.parent_slug ?? null,
+            p_parent_id: row.parent_id ?? null,
             p_description: row.description ?? null,
             p_logo_url: row.logo_url ?? null,
             p_email: row.email ?? null,
+            p_social_links: row.social_links ?? null,
             p_founded_year: row.founded_year ?? null,
             p_is_active: row.is_active ?? true,
+            p_id: row.id ?? null,
         });
 
     if (error) throw new Error(`[upsertOrganization:${row.slug}] ${error.message}`);
@@ -262,7 +278,7 @@ export async function getAllOrgMembers(): Promise<OrgMember[]> {
         .from('org_members')
         .select(`
             id, org_id, user_id, status, joined_at,
-            user:users!org_members_user_id_fkey(id, email, full_name, role, profile_picture_url),
+            user:users!org_members_user_id_fkey(id, email, full_name, role, profile_picture_url, enrollment_number, employee_id),
             org:organizations(id, name, slug, type, parent_id, logo_url, is_active)
         `)
         .eq('status', 'approved')
@@ -280,7 +296,7 @@ export async function getAllOrgPositions(): Promise<UserPosition[]> {
         .from('user_positions')
         .select(`
             id, user_id, org_id, title, por_type, valid_from, valid_until, is_active, created_at,
-            user:users!user_positions_user_id_fkey(id, email, full_name, role, profile_picture_url),
+            user:users!user_positions_user_id_fkey(id, email, full_name, role, profile_picture_url, enrollment_number, employee_id),
             org:organizations(id, name, slug, type, parent_id, logo_url, is_active)
         `)
         .order('created_at', { ascending: false });
@@ -289,52 +305,52 @@ export async function getAllOrgPositions(): Promise<UserPosition[]> {
     return (data ?? []).map(mapUserPosition);
 }
 
-/**
- * Upsert an org member by user email + org slug (Admin only — CSV bulk import).
- * NOTE: All params sent as explicit null to prevent PostgREST signature mismatch.
- */
-export async function upsertMemberByEmail(row: {
-    user_email: string;
+// upsertMemberByEntry: Add a member to an organization via entry_number
+export async function upsertMemberByEntry(row: {
+    entry_number: string;
     org_slug: string;
     status?: string;
-}): Promise<boolean> {
-    const { error } = await db
+}): Promise<OrgMember | null> {
+    const { data: member, error } = await db
         .rpc('admin_upsert_member', {
-            p_user_email: row.user_email,
+            p_entry_number: row.entry_number,
             p_org_slug: row.org_slug,
             p_status: row.status ?? 'approved',
         });
 
-    if (error) throw new Error(`[upsertMemberByEmail:${row.user_email}@${row.org_slug}] ${error.message}`);
-    return true;
+    if (error) {
+        console.error(`[upsertMemberByEntry] Error for ${row.entry_number} in ${row.org_slug}:`, error.message);
+        throw error;
+    }
+    return member?.[0] || null;
 }
 
-/**
- * Upsert a POR by user email + org slug + title (Admin only — CSV bulk import).
- * NOTE: All params sent as explicit null to prevent PostgREST signature mismatch.
- */
-export async function upsertPORByEmail(row: {
-    user_email: string;
+// upsertPORByEntry: Assign a Position of Responsibility via entry_number
+export async function upsertPORByEntry(row: {
+    entry_number: string;
     org_slug: string;
     title: string;
     por_type?: string;
     valid_from?: string;
     valid_until?: string;
     is_active?: boolean;
-}): Promise<boolean> {
-    const { error } = await db
+}): Promise<UserPosition | null> {
+    const { data: por, error } = await db
         .rpc('admin_upsert_por', {
-            p_user_email: row.user_email,
+            p_entry_number: row.entry_number,
             p_org_slug: row.org_slug,
             p_title: row.title,
             p_por_type: row.por_type ?? 'custom',
-            p_valid_from: row.valid_from ? row.valid_from.substring(0, 10) : null,
-            p_valid_until: row.valid_until ? row.valid_until.substring(0, 10) : null,
+            p_valid_from: row.valid_from ?? new Date().toISOString().slice(0, 10),
+            p_valid_until: row.valid_until ?? null,
             p_is_active: row.is_active ?? true,
         });
 
-    if (error) throw new Error(`[upsertPORByEmail:${row.user_email}] ${error.message}`);
-    return true;
+    if (error) {
+        console.error(`[upsertPORByEntry] Error for ${row.entry_number} parsing ${row.title}:`, error.message);
+        throw error;
+    }
+    return por?.[0] || null;
 }
 
 /**
@@ -350,7 +366,7 @@ export async function addOrgMember(orgId: string, userId: string): Promise<OrgMe
         })
         .select(`
             id, org_id, user_id, status, joined_at,
-            user:users!org_members_user_id_fkey(id, email, full_name, role, profile_picture_url)
+            user:users!org_members_user_id_fkey(id, email, full_name, role, profile_picture_url, enrollment_number, employee_id)
         `)
         .single();
 

@@ -3,74 +3,65 @@
 import React from 'react';
 import { useNotices } from '@/lib/hooks/useNotices';
 import { NoticeCard } from './NoticeCard';
+import { Loader2, Inbox } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Loader2, Megaphone, Filter } from 'lucide-react';
+import { NoticeCategory, NoticeStatus } from '@/lib/types';
 
-export function NoticeList() {
-    const { notices, loading, error, hasMore, loadMore, filters, updateFilters } = useNotices({ limit: 10 });
+interface NoticeListProps {
+    category?: NoticeCategory | 'all';
+    status?: NoticeStatus | 'all';
+    compact?: boolean;
+}
+
+export function NoticeList({ category = 'all', status = 'published', compact = false }: NoticeListProps) {
+    const { notices, loading, error, hasMore, loadMore } = useNotices({ category, status });
 
     if (error) {
         return (
-            <div className="p-8 text-center text-red-500 bg-red-50 dark:bg-red-900/10 rounded-xl border border-red-100 dark:border-red-900/30">
-                <p>Failed to load notices: {error}</p>
+            <div className="p-8 text-center bg-red-500/10 text-red-500 rounded-xl border border-red-500/20">
+                <p>Error loading notices: {error}</p>
+            </div>
+        );
+    }
+
+    if (!loading && notices.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center p-12 text-center bg-black/5 dark:bg-white/5 rounded-2xl border border-border border-dashed">
+                <div className="w-16 h-16 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center mb-4">
+                    <Inbox className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-bold font-serif mb-1">No Notices Found</h3>
+                <p className="text-muted-foreground max-w-sm">
+                    {category === 'all'
+                        ? "There are currently no active official notices for your profile."
+                        : `There are no active notices in the ${category.replace('_', ' ')} category.`}
+                </p>
             </div>
         );
     }
 
     return (
         <div className="space-y-6">
-            {/* Optional: Add basic filter controls directly above the list if needed */}
-            <div className="flex flex-wrap gap-2 items-center justify-between pb-2 border-b border-border">
-                <h2 className="text-sm font-medium text-muted-foreground opacity-70 flex items-center gap-2">
-                    <Megaphone className="w-4 h-4" /> Official Announcements
-                </h2>
-                <div className="flex gap-2">
-                    {/* Example of simple filter pills */}
-                    {(['all', 'academic', 'administrative', 'general'] as const).map(cat => (
-                        <button
-                            key={cat}
-                            onClick={() => updateFilters({ category: cat })}
-                            className={`text-xs px-3 py-1.5 rounded-full transition-colors ${filters.category === cat || (!filters.category && cat === 'all')
-                                ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900'
-                                : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700'
-                                }`}
-                        >
-                            {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            <div className="flex flex-col gap-4">
-                {notices.map((notice) => (
-                    <NoticeCard key={notice.id} notice={notice} />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {notices.map(notice => (
+                    <NoticeCard key={notice.id} notice={notice} compact={compact} />
                 ))}
             </div>
 
-            {loading && notices.length === 0 && (
-                <div className="flex justify-center p-12">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            {loading && (
+                <div className="flex justify-center p-6">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                 </div>
             )}
 
-            {!loading && notices.length === 0 && (
-                <div className="text-center p-12 bg-white/50 dark:bg-white/5 border border-dashed rounded-xl border-black/10 dark:border-white/10">
-                    <Megaphone className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-50" />
-                    <h3 className="font-medium text-foreground">No notices found</h3>
-                    <p className="text-sm text-muted-foreground mt-1">There are no official announcements matching your filters.</p>
-                </div>
-            )}
-
-            {hasMore && (
-                <div className="pt-4 flex justify-center">
+            {!loading && hasMore && (
+                <div className="flex justify-center pt-4">
                     <Button
                         variant="outline"
                         onClick={loadMore}
-                        disabled={loading}
-                        className="w-full sm:w-auto min-w-[200px]"
+                        className="rounded-full px-8 hover:bg-accent-cyan/10 hover:text-accent-cyan hover:border-accent-cyan/50 transition-colors"
                     >
-                        {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                        {loading ? 'Loading...' : 'Load Older Notices'}
+                        Load More Notices
                     </Button>
                 </div>
             )}

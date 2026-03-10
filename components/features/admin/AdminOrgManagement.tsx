@@ -140,7 +140,7 @@ export function AdminOrgManagement() {
     };
 
     // -- ORGS --
-    const ORG_COLS = 'name,slug,type,parent_slug,description,logo_url,email,founded_year,is_active';
+    const ORG_COLS = 'id,name,slug,type,parent_id,description,logo_url,email,social_links,founded_year,is_active';
 
     const handleOrgCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]; if (!file) return;
@@ -152,17 +152,23 @@ export function AdminOrgManagement() {
             setCsvResult({ succeeded: 0, failed: [{ row: 'header', reason: `Missing required columns: name, slug, type. Found columns: ${Object.keys(rawRows[0]).join(', ')}` }] }); setIsUploading(false); return;
         }
 
-        // Topological sort: parents must be uploaded before their children so the
-        // SQL parent_slug → UUID lookup never fails on a not-yet-inserted row.
+        // Topological sort: parents must be uploaded before their children
         const sortByDependency = (rows: Record<string, string>[]): Record<string, string>[] => {
-            const slugSet = new Set(rows.map(r => r.slug));
+            const idSet = new Set(rows.map(r => r.id).filter(Boolean));
             const sorted: Record<string, string>[] = [];
             const visited = new Set<string>();
             const visit = (row: Record<string, string>) => {
-                if (visited.has(row.slug)) return;
-                visited.add(row.slug);
-                const parent = rows.find(r => r.slug === row.parent_slug);
-                if (parent && slugSet.has(parent.slug)) visit(parent);
+                // If the row lacks an ID but has a parent_id, we can't perfectly topologically sort it 
+                // easily by ID if it's completely new. However, we assume new orgs generated *without* IDs
+                // won't be referenced as parents in the exact same file (since you can't reference an ID before it's created).
+                const rowKey = row.id || row.slug;
+                if (visited.has(rowKey)) return;
+                visited.add(rowKey);
+
+                if (row.parent_id) {
+                    const parent = rows.find(r => r.id === row.parent_id);
+                    if (parent && idSet.has(parent.id)) visit(parent);
+                }
                 sorted.push(row);
             };
             rows.forEach(visit);
@@ -170,20 +176,32 @@ export function AdminOrgManagement() {
         };
 
         const rows = sortByDependency(rawRows);
-        console.log('[CSV Upload] Sorted order:', rows.map(r => `${r.slug} (parent: ${r.parent_slug || 'NONE'})`));
+        console.log('[CSV Upload] Sorted order:', rows.map(r => `${r.slug} (parent_id: ${r.parent_id || 'NONE'})`));
 
-        const rpcPayload = rows.map(r => ({
-            name: r.name, slug: r.slug, type: r.type,
-            parent_slug: r.parent_slug || undefined,
-            description: r.description || undefined,
-            logo_url: r.logo_url || undefined,
-            email: r.email || undefined,
-            founded_year: r.founded_year ? parseInt(r.founded_year, 10) : undefined,
-            is_active: r.is_active !== '' ? r.is_active !== 'false' && r.is_active !== '0' : true,
-        }));
+        const rpcPayload = rows.map(r => {
+            let parsedSocialLinks = undefined;
+            if (r.social_links && r.social_links.trim() !== '') {
+                try {
+                    parsedSocialLinks = JSON.parse(r.social_links);
+                } catch (err) {
+                    console.warn(`Failed to parse social_links for ${r.slug}`);
+                }
+            }
+            return {
+                id: r.id || undefined,
+                name: r.name, slug: r.slug, type: r.type ? r.type.trim().toLowerCase() : '',
+                parent_id: r.parent_id || undefined,
+                description: r.description || undefined,
+                logo_url: r.logo_url || undefined,
+                email: r.email || undefined,
+                social_links: parsedSocialLinks,
+                founded_year: r.founded_year ? parseInt(r.founded_year, 10) : undefined,
+                is_active: r.is_active !== '' ? (r.is_active.trim().toLowerCase() !== 'false' && r.is_active.trim() !== '0') : true,
+            };
+        });
         console.log('[CSV Upload] RPC payload sample:', rpcPayload.slice(0, 3));
 
-        const result = await bulkUpsertOrgs(rpcPayload);
+        const result = await bulkUpsertOrgs(rpcPayload as any);
         console.log('[CSV Upload] Result:', result);
         setCsvResult(result);
         // Silent refresh — don't show the full-page spinner; just update data in the background
@@ -192,89 +210,86 @@ export function AdminOrgManagement() {
     };
 
     const downloadOrgTemplate = () => {
-        triggerDownload(`${ORG_COLS}\nCoding Club,coding-club,club,bost,"Club description.",,,2020,true\n`, 'org_template.csv');
+        triggerDownload(`${ORG_COLS}\nxxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx,Students' Gymkhana,students-gymkhana,governance_body,,Apex student body overseeing all student activities at IIT Ropar.,,,,,true\n,Board of Science and Technology,bost,board,xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx,Governs all technical clubs.,,,,,true\n`, 'org_template.csv');
     };
 
     const downloadCurrentOrgs = () => {
         const slugById: Record<string, string> = {};
         organizations.forEach(o => { slugById[o.id] = o.slug; });
-        const rows = organizations.map(o => [escape(o.name), escape(o.slug), escape(o.type),
-        escape(o.parentId ? slugById[o.parentId] : ''), escape(o.description), escape(o.logoUrl),
-        escape(o.email ?? ''), o.foundedYear ?? '', String(o.isActive ?? true)].join(','));
+        const rows = organizations.map(o => {
+            const hasSocials = o.socialLinks && Object.keys(o.socialLinks).length > 0;
+            return [
+                escape(o.id), escape(o.name), escape(o.slug), escape(o.type),
+                escape(o.parentId ?? ''), escape(o.description), escape(o.logoUrl),
+                escape(o.email ?? ''), escape(hasSocials ? JSON.stringify(o.socialLinks) : ''),
+                o.foundedYear ?? '', String(o.isActive ?? true)
+            ].join(',');
+        });
         triggerDownload([ORG_COLS, ...rows].join('\n'), `college_structure_${new Date().toISOString().slice(0, 10)}.csv`);
     };
 
     // -- MEMBERS --
-    const MEMBER_COLS = 'user_email,org_slug,status';
+    const MEMBER_COLS = 'entry_number,org_slug,status';
 
     const handleMemberCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]; if (!file) return;
         setCsvResult(null); setIsUploading(true);
         const rows = parseCSV(await file.text());
-        if (!rows.length || !rows[0].user_email || !rows[0].org_slug) {
-            setCsvResult({ succeeded: 0, failed: [{ row: 'header', reason: 'Missing required columns: user_email, org_slug' }] }); setIsUploading(false); return;
+        if (!rows.length || !rows[0].entry_number || !rows[0].org_slug) {
+            setCsvResult({ succeeded: 0, failed: [{ row: 'header', reason: 'Missing required columns: entry_number, org_slug' }] }); setIsUploading(false); return;
         }
         const result = await bulkUpsertMembers(rows.map(r => ({
-            user_email: r.user_email, org_slug: r.org_slug,
-            status: r.status || 'approved',
+            entry_number: r.entry_number, org_slug: r.org_slug,
+            status: r.status ? r.status.trim().toLowerCase() : 'approved',
         })));
         setCsvResult(result); setIsUploading(false); e.target.value = '';
     };
 
     const downloadMemberTemplate = () => {
-        triggerDownload(`${MEMBER_COLS}\njohn.doe@iitrpr.ac.in,coding-club,approved\n`, 'member_template.csv');
+        triggerDownload(`${MEMBER_COLS}\n2022CSB1001,coding-club,approved\n`, 'member_template.csv');
     };
 
     const downloadCurrentMembers = async () => {
         const members = await fetchAllMembers();
         const rows = members.map(m => [
-            escape(m.user?.email ?? ''), escape(m.org?.slug ?? ''), escape(m.status),
+            escape(m.user?.enrollmentNumber || m.user?.employeeId || ''), escape(m.org?.slug ?? ''), escape(m.status),
         ].join(','));
-        triggerDownload(['user_email,org_slug,status,full_name,org_name,joined_at',
-            ...members.map(m => [
-                escape(m.user?.email ?? ''), escape(m.org?.slug ?? ''), escape(m.status),
-                escape(m.user?.fullName ?? ''), escape(m.org?.name ?? ''),
-                m.joinedAt ? m.joinedAt.slice(0, 10) : ''
-            ].join(','))].join('\n'),
-            `all_members_${new Date().toISOString().slice(0, 10)}.csv`);
-        void rows; // suppress unused
+        triggerDownload([MEMBER_COLS, ...rows].join('\n'), `all_members_${new Date().toISOString().slice(0, 10)}.csv`);
     };
 
     // -- PORs --
-    const POR_COLS = 'user_email,org_slug,title,por_type,valid_from,valid_until,is_active';
+    const POR_COLS = 'entry_number,org_slug,title,por_type,valid_from,valid_until,is_active';
 
     const handlePORCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]; if (!file) return;
         setCsvResult(null); setIsUploading(true);
         const rows = parseCSV(await file.text());
-        if (!rows.length || !rows[0].user_email || !rows[0].org_slug || !rows[0].title) {
-            setCsvResult({ succeeded: 0, failed: [{ row: 'header', reason: 'Missing required columns: user_email, org_slug, title' }] }); setIsUploading(false); return;
+        if (!rows.length || !rows[0].entry_number || !rows[0].org_slug || !rows[0].title) {
+            setCsvResult({ succeeded: 0, failed: [{ row: 'header', reason: 'Missing required columns: entry_number, org_slug, title' }] }); setIsUploading(false); return;
         }
         const result = await bulkUpsertPORs(rows.map(r => ({
-            user_email: r.user_email, org_slug: r.org_slug, title: r.title,
-            por_type: r.por_type || undefined,
+            entry_number: r.entry_number, org_slug: r.org_slug, title: r.title,
+            por_type: r.por_type ? r.por_type.trim().toLowerCase() : undefined,
             valid_from: r.valid_from || undefined,
             valid_until: r.valid_until || undefined,
-            is_active: r.is_active !== '' ? r.is_active !== 'false' && r.is_active !== '0' : true,
+            is_active: r.is_active !== '' ? (r.is_active.trim().toLowerCase() !== 'false' && r.is_active.trim() !== '0') : true,
         })));
         setCsvResult(result); setIsUploading(false); e.target.value = '';
     };
 
     const downloadPORTemplate = () => {
-        triggerDownload(`${POR_COLS}\njohn.doe@iitrpr.ac.in,coding-club,President,secretary,2024-08-01,,true\n`, 'por_template.csv');
+        triggerDownload(`${POR_COLS}\n2022CSB1001,coding-club,President,secretary,2024-08-01,,true\n`, 'por_template.csv');
     };
 
     const downloadCurrentPORs = async () => {
         const positions = await fetchAllPositions();
-        triggerDownload([POR_COLS + ',full_name,org_name',
-        ...positions.map(p => [
-            escape(p.user?.email ?? ''), escape(p.org?.slug ?? ''), escape(p.title), escape(p.porType),
+        const rows = positions.map(p => [
+            escape(p.user?.enrollmentNumber || p.user?.employeeId || ''), escape(p.org?.slug ?? ''), escape(p.title), escape(p.porType),
             p.validFrom ? p.validFrom.slice(0, 10) : '',
             p.validUntil ? p.validUntil.slice(0, 10) : '',
-            String(p.isActive ?? true),
-            escape(p.user?.fullName ?? ''), escape(p.org?.name ?? '')
-        ].join(','))].join('\n'),
-            `all_pors_${new Date().toISOString().slice(0, 10)}.csv`);
+            String(p.isActive ?? true)
+        ].join(','));
+        triggerDownload([POR_COLS, ...rows].join('\n'), `all_pors_${new Date().toISOString().slice(0, 10)}.csv`);
     };
 
     if (isLoading) {
@@ -353,9 +368,14 @@ export function AdminOrgManagement() {
                                             <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 text-xs space-y-1.5">
                                                 <p className="font-semibold text-foreground">Required columns</p>
                                                 <div className="font-mono text-muted-foreground overflow-x-auto whitespace-nowrap">
-                                                    name, slug, type, parent_slug, description, logo_url, email, founded_year, is_active
+                                                    id, name, slug, type, parent_id, description, logo_url, email, social_links, founded_year, is_active
                                                 </div>
-                                                <p className="text-muted-foreground"><span className="font-semibold text-foreground">type:</span> governance_body | board | club | society | fest_committee &nbsp;|&nbsp; <span className="font-semibold text-foreground">parent_slug:</span> blank = top-level</p>
+                                                <p className="text-muted-foreground">
+                                                    <span className="font-semibold text-foreground">id:</span> leave blank for NEW orgs, use explicit UUID to UPDATE existing.
+                                                </p>
+                                                <p className="text-muted-foreground">
+                                                    <span className="font-semibold text-foreground">type:</span> governance_body | board | club | society | fest_committee &nbsp;|&nbsp; <span className="font-semibold text-foreground">parent_id:</span> blank = top-level
+                                                </p>
                                                 <div className="flex gap-3 pt-1">
                                                     <button className="flex items-center gap-1.5 text-primary hover:underline" onClick={downloadOrgTemplate}><Download className="h-3.5 w-3.5" /> Template</button>
                                                     <span className="text-muted-foreground">·</span>
@@ -374,8 +394,8 @@ export function AdminOrgManagement() {
                                         <div className="space-y-3">
                                             <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 text-xs space-y-1.5">
                                                 <p className="font-semibold text-foreground">Required columns</p>
-                                                <div className="font-mono text-muted-foreground">user_email, org_slug, status</div>
-                                                <p className="text-muted-foreground"><span className="font-semibold text-foreground">user_email:</span> Must match an existing user account &nbsp;|&nbsp; <span className="font-semibold text-foreground">status:</span> approved (default) | pending | removed</p>
+                                                <div className="font-mono text-muted-foreground">entry_number, org_slug, status</div>
+                                                <p className="text-muted-foreground"><span className="font-semibold text-foreground">entry_number:</span> Must match an exact user Enrollment or Employee ID &nbsp;|&nbsp; <span className="font-semibold text-foreground">status:</span> approved (default) | pending | removed</p>
                                                 <div className="flex gap-3 pt-1">
                                                     <button className="flex items-center gap-1.5 text-primary hover:underline" onClick={downloadMemberTemplate}><Download className="h-3.5 w-3.5" /> Template</button>
                                                     <span className="text-muted-foreground">·</span>
@@ -394,7 +414,8 @@ export function AdminOrgManagement() {
                                         <div className="space-y-3">
                                             <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 text-xs space-y-1.5">
                                                 <p className="font-semibold text-foreground">Required columns</p>
-                                                <div className="font-mono text-muted-foreground overflow-x-auto whitespace-nowrap">user_email, org_slug, title, por_type, valid_from, valid_until, is_active</div>
+                                                <div className="font-mono text-muted-foreground overflow-x-auto whitespace-nowrap">entry_number, org_slug, title, por_type, valid_from, valid_until, is_active</div>
+                                                <p className="text-muted-foreground"><span className="font-semibold text-foreground">entry_number:</span> Must match an exact user Enrollment/Employee ID.</p>
                                                 <p className="text-muted-foreground"><span className="font-semibold text-foreground">por_type:</span> secretary | representative | coordinator | mentor | custom &nbsp;|&nbsp; dates as <span className="font-mono">YYYY-MM-DD</span></p>
                                                 <div className="flex gap-3 pt-1">
                                                     <button className="flex items-center gap-1.5 text-primary hover:underline" onClick={downloadPORTemplate}><Download className="h-3.5 w-3.5" /> Template</button>
