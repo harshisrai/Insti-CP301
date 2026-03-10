@@ -1,135 +1,135 @@
 [
     {
-        "name": "Student Activity Building",
-        "shortCode": "SAB",
-        "category": "Student Life",
-        "description": "Hub for club activities, societies, student governance, and recreational spaces.",
-        "departments": [],
-        "polygon": [
-            [
-                30.9661204,
-                76.47698311
-            ],
-            [
-                30.9661204,
-                76.47799258
-            ],
-            [
-                30.96539881,
-                76.47799258
-            ],
-            [
-                30.96539881,
-                76.47698311
-            ]
-        ]
-    },
-    {
-        "name": "Lecture Hall Complex",
-        "shortCode": "LHC",
-        "category": "Academic",
-        "description": "Main lecture halls for undergraduate and postgraduate courses.",
-        "departments": [
-            "All Departments"
+    "name": "Super Academic Block ",
+    "shortCode": "SAB",
+    "category": "Academic",
+    "description": "It has several academic departments, faculty offices, specialized research facilities & DUC (Desi Urban Chai) outlet. ",
+    "departments": [],
+    "polygon": [
+        [
+            30.967953250625,
+            76.47372250919311
         ],
-        "polygon": [
-            [
-                30.96698631,
-                76.47496416
-            ],
-            [
-                30.96698631,
-                76.47614188
-            ],
-            [
-                30.96626472,
-                76.47614188
-            ],
-            [
-                30.96626472,
-                76.47496416
-            ]
-        ]
-    },
-    {
-        "name": "Central Library",
-        "shortCode": "LIB",
-        "category": "Academic",
-        "description": "Central library with reading halls, digital resources, journals, and group study rooms.",
-        "departments": [
-            "All Departments"
+        [
+            30.96795036425,
+            76.47534775997313
         ],
-        "polygon": [
-            [
-                30.96727495,
-                76.47328171
-            ],
-            [
-                30.96727495,
-                76.47429118
-            ],
-            [
-                30.96655336,
-                76.47429118
-            ],
-            [
-                30.96655336,
-                76.47328171
-            ]
-        ]
-    },
-    {
-        "name": "Administrative Block",
-        "shortCode": "ADMIN",
-        "category": "Administrative",
-        "description": "Houses the Dean's offices, registrar, finance, and administrative departments.",
-        "departments": [
-            "Administration"
+        [
+            30.96670345025,
+            76.47540832832519
         ],
-        "polygon": [
-            [
-                30.96785223,
-                76.47227223
-            ],
-            [
-                30.96785223,
-                76.47311346
-            ],
-            [
-                30.96727495,
-                76.47311346
-            ],
-            [
-                30.96727495,
-                76.47227223
-            ]
+        [
+            30.966663041,
+            76.47386047043945
+        ],
+        [
+            30.96685354175,
+            76.47370568465087
         ]
-    },
+    ]
+}  ,
     {
-        "name": "Hostel - Kameng",
-        "shortCode": "KAMENG",
-        "category": "Hostel",
-        "description": "Boys hostel with single and shared rooms, common areas, and mess facility.",
-        "departments": [],
-        "polygon": [
-            [
-                30.96467722,
-                76.48034801
-            ],
-            [
-                30.96467722,
-                76.48135749
-            ],
-            [
-                30.9638113,
-                76.48135749
-            ],
-            [
-                30.9638113,
-                76.48034801
-            ]
+    "name": "Lecture Hall Complex",
+    "shortCode": "LHC",
+    "category": "Academic",
+    "description": "Main lecture halls for UG, PG etc courses & Club sessions.",
+    "departments": [],
+    "polygon": [
+        [
+            30.967947477875,
+            76.47175403775145
+        ],
+        [
+            30.967814704625,
+            76.4715723326953
+        ],
+        [
+            30.967629976625002,
+            76.47166991504028
+        ],
+        [
+            30.967502976125,
+            76.47179105174438
+        ],
+        [
+            30.967433703125,
+            76.47189199899779
+        ],
+        [
+            30.967526067125,
+            76.47199967606811
+        ],
+        [
+            30.96743081675,
+            76.47210398822997
+        ],
+        [
+            30.967511635250002,
+            76.4722554091101
+        ],
+        [
+            30.967612658375,
+            76.47241019489867
+        ],
+        [
+            30.96783490925,
+            76.47218474603271
+        ],
+        [
+            30.967817591,
+            76.47210398822997
+        ],
+        [
+            30.967987887125002,
+            76.47193237789917
+        ],
+        [
+            30.96803118275,
+            76.47185498500488
+        ],
+        [
+            30.968048501000002,
+            76.4718280657373
+        ],
+        [
+            30.968048501000002,
+            76.47178095701904
+        ],
+        [
+            30.968019637250002,
+            76.47175067284302
         ]
-    },
+    ]
+},
+   {
+    "name": "Nalanda Library",
+    "shortCode": "Library",
+    "category": "Academic",
+    "description": "Central library with reading halls, digital resources, journals, and group study rooms.",
+    "departments": [],
+    "polygon": [
+        [
+            30.96743081675,
+            76.47299905387695
+        ],
+        [
+            30.967422157625002,
+            76.47351724977783
+        ],
+        [
+            30.967052701625,
+            76.4734936954187
+        ],
+        [
+            30.9670671335,
+            76.47326488164428
+        ],
+        [
+            30.967046928875,
+            76.47303270296142
+        ]
+    ]
+},
     {
         "name": "Sports Complex",
         "shortCode": "SPORTS",
@@ -207,4 +207,46 @@
             ]
         ]
     }
+,
+{
+    "name": "Admin Block",
+    "shortCode": "Admin Block",
+    "category": "Administrative",
+    "description": "Has several administrative offices and Senate Hall -Houses the Dean's offices, registrar, finance, and administrative departments.",
+    "departments": [],
+    "polygon": [
+        [
+            30.968709480875,
+            76.47241355980712
+        ],
+        [
+            30.9685218665,
+            76.47242365453246
+        ],
+        [
+            30.96852763925,
+            76.47302260823608
+        ],
+        [
+            30.968556503000002,
+            76.47302260823608
+        ],
+        [
+            30.968556503000002,
+            76.47346677615111
+        ],
+        [
+            30.968530525625,
+            76.47347687087645
+        ],
+        [
+            30.968542071125,
+            76.47407582458007
+        ],
+        [
+            30.96872391275,
+            76.47407245967163
+        ]
+    ]
+}
 ]

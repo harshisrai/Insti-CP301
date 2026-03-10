@@ -383,6 +383,7 @@
             <button class="btn btn-secondary" onclick="undoPoint()">Undo</button>
             <button class="btn btn-danger" onclick="resetCreator()">Reset</button>
             <button class="btn btn-success" onclick="generateJson()">Generate JSON</button>
+            <button class="btn" style="background:#475569; color:white; grid-column: span 2;" onclick="exitCreator()">❌ Exit Creator Mode</button>
         </div>
     </div>
 
@@ -525,7 +526,8 @@
             const poly = L.polygon(latLngs, {
                 color: colors.border,
                 fillColor: colors.fill,
-                fillOpacity: 0.2,
+                fillOpacity: 0, // hidden by default
+                opacity: 0,     // hidden by default
                 weight: 1.5,
                 className: 'building-poly'
             }).addTo(polygonLayer);
@@ -536,7 +538,7 @@
             // ── Hover ──
             poly.on('mouseover', function() {
                 if (this !== activePolygon) {
-                    this.setStyle({ fillOpacity: 0.4, weight: 2.5 });
+                    this.setStyle({ fillOpacity: 0.4, weight: 2.5, opacity: 1 });
                 }
                 // Tooltip with name
                 this.bindTooltip(b.shortCode, {
@@ -548,7 +550,7 @@
 
             poly.on('mouseout', function() {
                 if (this !== activePolygon) {
-                    this.setStyle({ fillOpacity: 0.2, weight: 1.5 });
+                    this.setStyle({ fillOpacity: 0, opacity: 0, weight: 1.5 });
                 }
                 this.closeTooltip();
             });
@@ -588,6 +590,7 @@
             fillOpacity: 0.45,
             weight: 3,
             color: '#ffffff',
+            opacity: 1,
             dashArray: null
         });
 
@@ -607,9 +610,6 @@
                     <span class="popup-tag" style="background:${colors.tag}; color:${colors.tagText}">
                         ${b.category}
                     </span>
-                    <span style="font-size:10px; color:#64748b; font-family:monospace;">
-                        ${centerGps[0]}, ${centerGps[1]}
-                    </span>
                 </div>
                 <p>${b.description}</p>
                 ${b.departments.length > 0
@@ -625,7 +625,8 @@
         if (!poly || !poly._building) return;
         const colors = getColors(poly._building.category);
         poly.setStyle({
-            fillOpacity: 0.2,
+            fillOpacity: 0,
+            opacity: 0,
             weight: 1.5,
             color: colors.border
         });
@@ -792,7 +793,7 @@
                 }
 
                 if (isTracking) {
-                    map.flyTo(latLng, Math.max(map.getZoom(), 4), { duration: 1 });
+                    map.flyTo(latLng, 5.5, { duration: 1.0 });
                 }
             },
             (err) => {
@@ -823,8 +824,32 @@
         isCreatorMode = !isCreatorMode;
         creatorToggle.classList.toggle('active');
         creatorPanel.style.display = isCreatorMode ? 'flex' : 'none';
-        if (!isCreatorMode) resetCreator();
+        
+        if (isCreatorMode) {
+            // Hide existing polygons to prevent interference
+            if (map.hasLayer(polygonLayer)) {
+                map.removeLayer(polygonLayer);
+            }
+        } else {
+            resetCreator();
+            // Show existing polygons again
+            if (!map.hasLayer(polygonLayer)) {
+                map.addLayer(polygonLayer);
+            }
+        }
     });
+
+    window.exitCreator = function() {
+        if (isCreatorMode) {
+            isCreatorMode = false;
+            creatorToggle.classList.remove('active');
+            creatorPanel.style.display = 'none';
+            resetCreator();
+            if (!map.hasLayer(polygonLayer)) {
+                map.addLayer(polygonLayer);
+            }
+        }
+    };
 
     // We modify the existing map click handler or add a new one
     map.on('click', (e) => {
